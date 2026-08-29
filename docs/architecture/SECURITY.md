@@ -30,3 +30,25 @@ other.
 
 DB port defaults to 5432 (PostgreSQL) pending the data-tier module's actual engine choice
 once decided later.
+
+## IAM
+
+**App instance role** 
+(`*-app-role`, instance profile `*-app-profile`):
+`AmazonSSMManagedInstanceCore` (ties to the no-SSH/SSM-only management
+decision above) and `CloudWatchAgentServerPolicy` (baseline metrics/log
+shipping). No S3, Secrets Manager, or RDS access yet. Those get added by
+the modules that actually create those resources, scoped to the specific
+ARNs they own.
+
+**Deploy role permissions.** 
+`ce-capstone-bouncer-deploy` started with zero permissions. 
+Each layer attaches its own scoped policy covering only what it creates. 
+See ADR 0002. Foundation's slice:
+VPC/subnet/IGW/NAT/route-table/security-group management (unavoidably
+`Resource: "*"` — EC2 doesn't support ARN scoping on these actions),
+IAM role/instance-profile/policy management scoped to
+`ce-capstone-bouncer-*` ARNs, `iam:PassRole` scoped to the same prefix and
+conditioned on `iam:PassedToService = ec2.amazonaws.com`, and S3
+read/write/list scoped to the `dev/foundation/` prefix of the state
+bucket only.

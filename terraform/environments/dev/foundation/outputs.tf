@@ -34,4 +34,15 @@ output "cache_security_group_id" {
   value = module.security.cache_security_group_id
 }
 
-#
+#App IAM role outputs
+output "app_role_arn" {
+  value = module.iam.app_role_arn
+}
+
+output "app_instance_profile_name" {
+  value = module.iam.app_instance_profile_name
+}
+
+output "app_instance_profile_arn" {
+  value = module.iam.app_instance_profile_arn
+}

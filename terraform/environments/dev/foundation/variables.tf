@@ -20,3 +20,14 @@ variable "enable_billable_resources" {
   type        = bool
   default     = true
 }
+variable "deploy_role_name" {
+  description = "Name of the existing GitHub Actions OIDC deploy role"
+  type        = string
+  default     = "ce-capstone-bouncer-deploy"
+}
+
+variable "tfstate_bucket" {
+  description = "Name of the Terraform remote state S3 bucket"
+  type        = string
+  default     = "ce-capstone-bouncer-tfstate-f7fc4b65"
+}
