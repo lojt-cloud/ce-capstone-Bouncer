@@ -8,3 +8,9 @@ module "networking" {
   name_prefix          = "${var.project_name}-${var.environment}"
   enable_billable_resources = var.enable_billable_resources
 }
+module "security" {
+  source = "../../../modules/security"
+
+  vpc_id      = module.networking.vpc_id
+  name_prefix = "${var.project_name}-${var.environment}"
+}
