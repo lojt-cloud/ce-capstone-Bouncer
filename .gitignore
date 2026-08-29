@@ -26,3 +26,4 @@ venv/
 .DS_Store
 github-trust-policy.json
 reference/
+*.swp
