@@ -25,3 +25,4 @@ venv/
 # OS
 .DS_Store
 github-trust-policy.json
+reference/
