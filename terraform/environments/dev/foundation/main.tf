@@ -14,3 +14,14 @@ module "security" {
   vpc_id      = module.networking.vpc_id
   name_prefix = "${var.project_name}-${var.environment}"
 }
+data "aws_caller_identity" "current" {}
+
+module "iam" {
+  source = "../../../modules/iam"
+
+  name_prefix      = "${var.project_name}-${var.environment}"
+  project_name     = var.project_name
+  account_id       = data.aws_caller_identity.current.account_id
+  deploy_role_name = var.deploy_role_name
+  tfstate_bucket   = var.tfstate_bucket
+}
