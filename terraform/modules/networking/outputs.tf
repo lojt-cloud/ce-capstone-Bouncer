@@ -21,3 +21,10 @@ output "public_route_table_id" {
 output "availability_zones" {
   value = var.availability_zones
 }
+output "nat_gateway_id" {
+  value = var.enable_billable_resources ? aws_nat_gateway.this[0].id : null
+}
+
+output "private_route_table_id" {
+  value = aws_route_table.private.id
+}

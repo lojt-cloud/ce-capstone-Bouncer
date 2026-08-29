@@ -22,3 +22,8 @@ variable "name_prefix" {
   description = "Prefix for resource Name tags"
   type        = string
 }
+variable "enable_billable_resources" {
+  description = "Toggle for billable resources (NAT Gateway). Set false and re-apply to scale down between work sessions."
+  type        = bool
+  default     = true
+}
