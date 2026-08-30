@@ -136,12 +136,12 @@ data "aws_iam_policy_document" "deploy_foundation" {
     ]
     resources = ["arn:aws:logs:${var.aws_region}:${var.account_id}:log-group:/vpc/${var.project_name}-*"]
   }
-statement {
-  sid       = "FlowLogsCloudWatchReadOnly"
-  effect    = "Allow"
-  actions   = ["logs:DescribeLogGroups"]
-  resources = ["*"]
-}
+  statement {
+    sid       = "FlowLogsCloudWatchReadOnly"
+    effect    = "Allow"
+    actions   = ["logs:DescribeLogGroups"]
+    resources = ["*"]
+  }
   statement {
     sid    = "AppRoleManage"
     effect = "Allow"
