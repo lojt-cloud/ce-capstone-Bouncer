@@ -1,0 +1,46 @@
+{
+    "failed_checks": [
+        {
+            "file": "/modules/iam/main.tf",
+            "findings": [
+                {
+                    "resource": "module.iam.aws_iam_policy_document.deploy_foundation",
+                    "check_ids": [
+                        "CKV_AWS_111",
+                        "CKV_AWS_356"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/modules/networking/main.tf",
+            "findings": [
+                {
+                    "resource": "module.networking.aws_subnet.public[0]",
+                    "check_ids": [
+                        "CKV_AWS_130"
+                    ]
+                },
+                {
+                    "resource": "module.networking.aws_subnet.public[1]",
+                    "check_ids": [
+                        "CKV_AWS_130"
+                    ]
+                },
+                {
+                    "resource": "module.networking.aws_subnet.public[2]",
+                    "check_ids": [
+                        "CKV_AWS_130"
+                    ]
+                },
+                {
+                    "resource": "module.networking.aws_vpc.this",
+                    "check_ids": [
+                        "CKV2_AWS_11",
+                        "CKV2_AWS_12"
+                    ]
+                }
+            ]
+        }
+    ]
+}

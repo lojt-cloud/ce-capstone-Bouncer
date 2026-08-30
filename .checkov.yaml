@@ -1,0 +1,20 @@
+# .checkov.yaml
+directory:
+  - terraform
+framework:
+  - terraform
+baseline: .checkov.baseline
+
+skip-check:
+  # ALB is internet-facing by design; port 80 kept for HTTP->HTTPS redirect.
+  - CKV_AWS_260
+  # NAT Gateway EIP — checkov only recognizes EC2-attached EIPs; false
+  # positive for NAT Gateway attachments (known checkov limitation).
+  - CKV2_AWS_19
+  # SGs created in Foundation, attached in compute/data-tier's own state
+  # (ADR 0001: layered per-module state). Checkov can't trace attachment
+  # across terraform_remote_state — permanent, not a bug.
+  - CKV2_AWS_5
+
+compact: true
+quiet: true

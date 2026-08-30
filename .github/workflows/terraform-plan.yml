@@ -1,0 +1,92 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-plan.yml'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  lint-and-scan:
+    name: fmt + checkov
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.0
+
+      - name: terraform fmt check
+        run: terraform fmt -check -recursive terraform/
+
+      - name: Install checkov
+        run: pip install checkov==3.3.16
+
+      - name: Run checkov
+        run: checkov -d terraform --config-file .checkov.yaml --compact
+
+  plan:
+    name: plan (${{ matrix.layer }})
+    needs: lint-and-scan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # add each new layer here once it's built
+        layer: [foundation]
+    defaults:
+      run:
+        working-directory: terraform/environments/dev/${{ matrix.layer }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.0
+          terraform_wrapper: true
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::743631836010:role/ce-capstone-bouncer-deploy
+          aws-region: eu-central-1
+
+      - name: terraform init
+        run: terraform init
+
+      - name: terraform validate
+        run: terraform validate
+
+      - name: terraform plan
+        id: plan
+        run: terraform plan -no-color -input=false
+        continue-on-error: true
+
+      - name: Comment plan on PR
+        uses: actions/github-script@v7
+        env:
+          PLAN: "${{ steps.plan.outputs.stdout }}"
+          LAYER: ${{ matrix.layer }}
+        with:
+          script: |
+            const output = `#### Terraform Plan — \`${process.env.LAYER}\`
+            \`\`\`
+            ${process.env.PLAN}
+            \`\`\`
+            `;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: Fail if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
