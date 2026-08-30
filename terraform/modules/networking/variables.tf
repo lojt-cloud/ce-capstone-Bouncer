@@ -30,5 +30,5 @@ variable "enable_billable_resources" {
 variable "flow_log_retention_days" {
   description = "CloudWatch Logs retention for VPC flow logs"
   type        = number
-  default     = 14
+  default     = 365
 }
