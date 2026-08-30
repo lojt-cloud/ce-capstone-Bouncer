@@ -15,6 +15,10 @@ skip-check:
   # (ADR 0001: layered per-module state). Checkov can't trace attachment
   # across terraform_remote_state — permanent, not a bug.
   - CKV2_AWS_5
+    # CloudWatch Logs default (AWS-managed) encryption is sufficient for this
+  # dev capstone; a customer-managed KMS key is a production consideration,
+  # not worth the extra $1/mo CMK cost at this scale.
+  - CKV_AWS_158
 
 compact: true
 quiet: true
