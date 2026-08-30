@@ -46,26 +46,62 @@ data "aws_iam_role" "deploy" {
 
 data "aws_iam_policy_document" "deploy_foundation" {
   statement {
-    sid    = "NetworkingManage"
+    sid       = "NetworkingReadOnly"
+    effect    = "Allow"
+    actions   = ["ec2:Describe*"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "NetworkingNoScopeSupport"
     effect = "Allow"
     actions = [
-      "ec2:Describe*",
-      "ec2:CreateVpc", "ec2:DeleteVpc", "ec2:ModifyVpcAttribute",
-      "ec2:CreateSubnet", "ec2:DeleteSubnet", "ec2:ModifySubnetAttribute",
-      "ec2:CreateInternetGateway", "ec2:DeleteInternetGateway",
-      "ec2:AttachInternetGateway", "ec2:DetachInternetGateway",
-      "ec2:CreateNatGateway", "ec2:DeleteNatGateway",
-      "ec2:AllocateAddress", "ec2:ReleaseAddress",
-      "ec2:AssociateAddress", "ec2:DisassociateAddress",
-      "ec2:CreateRouteTable", "ec2:DeleteRouteTable",
-      "ec2:CreateRoute", "ec2:DeleteRoute", "ec2:ReplaceRoute",
-      "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable", "ec2:ReplaceRouteTableAssociation",
-      "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup",
-      "ec2:CreateTags", "ec2:DeleteTags"
+      "ec2:DeleteVpc", "ec2:ModifyVpcAttribute", "ec2:ModifySubnetAttribute",
+      "ec2:ReleaseAddress", "ec2:DetachInternetGateway",
+      "ec2:DisassociateRouteTable", "ec2:ReplaceRoute",
+      "ec2:ReplaceRouteTableAssociation"
     ]
     resources = ["*"]
-    # EC2 create/modify/delete actions don't support resource-level ARN
-    # scoping - AWS API limitation, not a design choice.
+  }
+
+  statement {
+    sid    = "NetworkingCreate"
+    effect = "Allow"
+    actions = [
+      "ec2:CreateVpc", "ec2:CreateSubnet", "ec2:CreateInternetGateway",
+      "ec2:CreateNatGateway", "ec2:AllocateAddress", "ec2:CreateRouteTable",
+      "ec2:CreateSecurityGroup"
+    ]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Project"
+      values   = [var.project_name]
+    }
+  }
+
+  statement {
+    sid    = "NetworkingManageExisting"
+    effect = "Allow"
+    actions = [
+      "ec2:DeleteSubnet", "ec2:DeleteInternetGateway", "ec2:AttachInternetGateway",
+      "ec2:DeleteNatGateway", "ec2:AssociateAddress", "ec2:DeleteRouteTable",
+      "ec2:CreateRoute", "ec2:DeleteRoute", "ec2:AssociateRouteTable",
+      "ec2:DeleteSecurityGroup"
+    ]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_name]
+    }
+  }
+
+  statement {
+    sid       = "TagManage"
+    effect    = "Allow"
+    actions   = ["ec2:CreateTags", "ec2:DeleteTags"]
+    resources = ["*"]
   }
 
   statement {
@@ -76,6 +112,29 @@ data "aws_iam_policy_document" "deploy_foundation" {
       "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress"
     ]
     resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_name]
+    }
+  }
+
+  statement {
+    sid       = "FlowLogsManage"
+    effect    = "Allow"
+    actions   = ["ec2:CreateFlowLogs", "ec2:DeleteFlowLogs"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "FlowLogsCloudWatchManage"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy",
+      "logs:DescribeLogGroups", "logs:ListTagsForResource",
+      "logs:TagResource", "logs:UntagResource"
+    ]
+    resources = ["arn:aws:logs:${var.aws_region}:${var.account_id}:log-group:/vpc/${var.project_name}-*"]
   }
 
   statement {
@@ -101,16 +160,16 @@ data "aws_iam_policy_document" "deploy_foundation" {
     sid    = "DeployPolicyManage"
     effect = "Allow"
     actions = [
-      "iam:GetPolicy", "iam:CreatePolicy", "iam:DeletePolicy",
+      "iam:GetPolicy", "iam:GetPolicyVersion",
+      "iam:CreatePolicy", "iam:DeletePolicy",
       "iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:ListPolicyVersions",
       "iam:TagPolicy", "iam:UntagPolicy"
     ]
     resources = ["arn:aws:iam::${var.account_id}:policy/${var.project_name}-*"]
-    # Lets the deploy role manage this very policy (and future layers policies) on later re-applies.
   }
 
   statement {
-    sid       = "PassAppRoleToEc2"
+    sid       = "PassRolesToServices"
     effect    = "Allow"
     actions   = ["iam:PassRole"]
     resources = ["arn:aws:iam::${var.account_id}:role/${var.project_name}-*"]
@@ -118,7 +177,7 @@ data "aws_iam_policy_document" "deploy_foundation" {
     condition {
       test     = "StringEquals"
       variable = "iam:PassedToService"
-      values   = ["ec2.amazonaws.com"]
+      values   = ["ec2.amazonaws.com", "vpc-flow-logs.amazonaws.com"]
     }
   }
 

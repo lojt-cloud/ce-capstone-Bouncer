@@ -37,4 +37,5 @@ module "iam" {
   account_id       = data.aws_caller_identity.current.account_id
   deploy_role_name = var.deploy_role_name
   tfstate_bucket   = var.tfstate_bucket
+  aws_region       = var.aws_region
 }

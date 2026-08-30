@@ -122,3 +122,10 @@ resource "aws_vpc_security_group_ingress_rule" "cache_from_app" {
   ip_protocol                  = "tcp"
   referenced_security_group_id = aws_security_group.app.id
 }
+resource "aws_default_security_group" "this" {
+  vpc_id = var.vpc_id
+
+  tags = {
+    Name = "${var.name_prefix}-default-sg-locked"
+  }
+}

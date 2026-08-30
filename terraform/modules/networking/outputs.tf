@@ -28,3 +28,10 @@ output "nat_gateway_id" {
 output "private_route_table_id" {
   value = aws_route_table.private.id
 }
+output "flow_log_group_name" {
+  value = aws_cloudwatch_log_group.vpc_flow_logs.name
+}
+
+output "flow_log_group_arn" {
+  value = aws_cloudwatch_log_group.vpc_flow_logs.arn
+}
