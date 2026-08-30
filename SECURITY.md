@@ -52,3 +52,9 @@ IAM role/instance-profile/policy management scoped to
 conditioned on `iam:PassedToService = ec2.amazonaws.com`, and S3
 read/write/list scoped to the `dev/foundation/` prefix of the state
 bucket only.
+
+## Checkov
+
+Policy as code (Checkov). Every PR scans the full terraform/ tree with Checkov's built-in AWS ruleset. This module wires the tool only; custom policies are the separate Excellence-requirement scope owned by the observability/cost module. 
+A .checkov.baseline snapshot grandfathers findings that predate this gate (e.g. the documented single-AZ RDS and single shared NAT Gateway cost trade-offs); any new finding fails the build and blocks merge. 
+Suppressions beyond the baseline go in .checkov.yaml's skip-check list, each with a comment pointing to the ADR or COSTS.md section that justifies i. No bare skips.

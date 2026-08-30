@@ -22,3 +22,7 @@ variable "tfstate_bucket" {
   description = "Name of the Terraform remote state S3 bucket"
   type        = string
 }
+variable "aws_region" {
+  description = "AWS region, used to build the flow-logs CloudWatch Logs ARN"
+  type        = string
+}
