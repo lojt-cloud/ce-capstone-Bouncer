@@ -19,6 +19,9 @@ module "compute" {
   app_instance_profile_name = data.terraform_remote_state.foundation.outputs.app_instance_profile_name
   app_role_arn              = data.terraform_remote_state.foundation.outputs.app_role_arn
 
+  db_secret_name    = data.terraform_remote_state.data_tier.outputs.db_secret_name
+  cache_secret_name = data.terraform_remote_state.data_tier.outputs.cache_secret_name
+
   ami_id            = var.ami_id
   instance_type     = var.instance_type
   app_port          = var.app_port

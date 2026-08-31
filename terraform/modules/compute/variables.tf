@@ -10,6 +10,15 @@ variable "app_security_group_id" { type = string }
 variable "app_instance_profile_name" { type = string }
 variable "app_role_arn" { type = string }
 
+variable "db_secret_name" {
+  description = "Secrets Manager secret name (not ARN) holding RDS credentials -- the app fetches this itself via boto3 at boot using its instance role, never a plaintext env var. From data-tier's remote state."
+  type        = string
+}
+
+variable "cache_secret_name" {
+  description = "Secrets Manager secret name (not ARN) holding the Redis endpoint/auth token, same pattern as db_secret_name. From data-tier's remote state."
+  type        = string
+}
 variable "ami_id" { type = string }
 
 variable "instance_type" {

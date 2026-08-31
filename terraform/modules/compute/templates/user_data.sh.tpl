@@ -26,6 +26,9 @@ Type=simple
 WorkingDirectory=/opt/bouncer-app
 Environment=PYTHONUNBUFFERED=1
 Environment=APP_PORT=${app_port}
+Environment=AWS_REGION=${aws_region}
+Environment=DB_SECRET_NAME=${db_secret_name}
+Environment=CACHE_SECRET_NAME=${cache_secret_name}
 ExecStart=/opt/bouncer-app/venv/bin/gunicorn -w 2 -b 0.0.0.0:${app_port} --access-logfile /opt/bouncer-app/app.log --error-logfile /opt/bouncer-app/app.log server:app
 Restart=always
 RestartSec=5
