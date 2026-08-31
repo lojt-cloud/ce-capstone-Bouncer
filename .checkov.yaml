@@ -31,6 +31,23 @@ skip-check:
   # Everything else is tag-conditioned. Confirmed unavoidable, not an oversight.
   - CKV_AWS_356
   - CKV_AWS_111
+  # App-artifact bucket (compute module) holds redeployable code zips,
+  # rebuilt from app/src in git on every deploy.sh run — not sensitive
+  # data. Access logging would need a separate logging-target bucket for
+  # negligible benefit at this scale.
+  - CKV_AWS_18
+  # Same trade-off as CKV_AWS_158 above: SSE-S3 (AES256) already covers
+  # encryption at rest. A customer-managed KMS key adds ~$1/mo + key-policy
+  # overhead for a bucket with nothing sensitive in it.
+  - CKV_AWS_145
+  # No consumer for bucket-change notifications on the app-artifact bucket —
+  # deploy.sh explicitly triggers the ASG instance refresh itself; nothing
+  # else needs to react to object-create events here.
+  - CKV2_AWS_62
+  # App-artifact bucket contents are fully reproducible from app/src in
+  # git — if lost, deploy.sh just re-runs and re-uploads. No DR value in
+  # replicating a rebuildable deploy artifact cross-region.
+  - CKV_AWS_144
 
 compact: true
 quiet: true
