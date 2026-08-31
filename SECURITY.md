@@ -168,3 +168,39 @@ suppressions:
 Any *new* finding a future PR introduces fails the build and blocks
 merge — not because a baseline says so, since there isn't one, but
 because it genuinely isn't accepted yet.
+
+## Compute Layer
+
+- **No SSH, no bastion.** App instances have no key pair and no public
+  IP; management is exclusively via SSM Session Manager, through the
+  existing `AmazonSSMManagedInstanceCore` permission on the app role.
+- **IMDSv2 enforced** (`http_tokens = "required"` on the launch
+  template) — the app itself only uses the token-based flow, and the
+  instance metadata endpoint rejects the older no-token IMDSv1 calls
+  entirely. Closes the classic SSRF-to-credential-theft path.
+- **App tier has no direct internet exposure.** Instances sit in private
+  subnets with no public IP, reachable only from `alb-sg` on port 8000
+  (`app-sg`) — never from `0.0.0.0/0` directly.
+- **ALB is HTTP-only for now**, deliberately — this is a tracked gap,
+  not an oversight. HTTPS/ACM is the Route53+ACM module's scope; a
+  companion HTTPS listener (and likely an HTTP→HTTPS redirect) lands
+  there. See `00-shared-context.md`.
+- **Least-privilege IAM for the app-artifact bucket.** The EC2 app role
+  was granted exactly one new permission — `s3:GetObject` on the
+  compute app-artifact bucket, nothing broader — via a policy scoped to
+  that bucket's ARN specifically, attached without modifying Foundation's
+  existing role policies.
+- **App-artifact S3 bucket** (`ce-capstone-bouncer-dev-app-artifacts-*`):
+  versioned, SSE-S3 encrypted, all public access blocked, lifecycle rule
+  expiring noncurrent versions and aborting incomplete multipart uploads.
+  Holds only redeployable app code, not secrets or user data.
+- **ALB deletion protection is deliberately off** — a cost/operability
+  trade-off (the ALB is gated behind `enable_billable_resources` and
+  meant to be torn down between work sessions), not a security gap. See
+  `COSTS.md`.
+- **Open item:** the CI deploy role currently has no permissions over
+  the compute layer — everything so far was applied with local/personal
+  credentials, which is broader-privileged than the pipeline will
+  eventually use. Tracked in `00-shared-context.md` and
+  `claude/compute-deploy-policy-brief.md`, to be closed in a follow-up
+  session before CI/CD is wired to this layer.
