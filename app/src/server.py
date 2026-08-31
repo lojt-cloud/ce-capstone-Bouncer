@@ -1,8 +1,10 @@
 import json
+import os
 import secrets
 import socket
 import time
 import urllib.request
+
 
 import bcrypt
 import psycopg
@@ -43,6 +45,26 @@ if Config.DB_HOST and Config.DB_USER and Config.DB_PASSWORD:
     except psycopg.OperationalError:
         _db_pool.close()
         _db_pool = None
+
+# Self-heals the schema: if RDS is ever destroyed and recreated (or this
+# is a fresh environment), the app creates the users table itself on the
+# first successful connection. CREATE TABLE IF NOT EXISTS is idempotent,
+# so this is safe to run on every boot and from every gunicorn worker
+# (-w 2 means this block runs twice at startup, by design).
+if _db_pool is not None:
+    _schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
+    try:
+        with open(_schema_path) as f:
+            schema_sql = f.read()
+        conn = _db_pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(schema_sql)
+            conn.commit()
+        finally:
+            _db_pool.putconn(conn)
+    except Exception as exc:
+        print(f"[schema init] failed to apply schema.sql: {exc}")
 
 _redis_client = None
 if Config.CACHE_HOST:
