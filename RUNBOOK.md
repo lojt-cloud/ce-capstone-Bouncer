@@ -118,3 +118,17 @@ bcrypt verified, session written to Redis, cookie issued.
 Note: this procedure is only needed after an actual RDS destroy/recreate.
 Redeploying the app alone (`./app/deploy.sh`) or an ASG instance refresh
 with RDS untouched leaves existing rows intact -- no reseed needed.
+
+## NAT Gateway EIP release failure on toggle-off
+
+`terraform apply -var="enable_billable_resources=false"` in the
+foundation layer can fail releasing the NAT Gateway's EIP with
+`InvalidNetworkInterfaceID.NotFound`, referencing an ENI that no longer
+exists -- a stale reference in AWS's EIP-release path, not a real
+association (confirmed via `aws ec2 describe-addresses`, which showed
+no `AssociationId`/`NetworkInterfaceId`). Retrying `terraform apply`
+does not resolve it. Fix: release the EIP directly, then re-apply to
+reconcile state:
+
+    aws ec2 release-address --allocation-id <id> --region eu-central-1
+    terraform apply -var="enable_billable_resources=false"
