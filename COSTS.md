@@ -39,3 +39,11 @@ only the RDS instance itself is gated.
 Storage type is gp2, not gp3 -- AWS's Free Tier documentation still names
 gp2 specifically for the free 20GB; gp3 eligibility isn't confirmed, and the
 price gap at this volume is under $2/mo regardless.
+
+Adds one `cache.t4g.micro` ElastiCache Redis node (single node, no replica --
+`automatic_failover_enabled = false`), roughly the same per-hour rate as the
+RDS instance (~$0.016-0.02/hr, ~€12-15/mo). Gated behind the same
+`enable_billable_resources` flag as the RDS instance -- one toggle covers
+this whole layer. Losing this node on toggle-off has zero consequence: it
+holds only login-lockout counters and session tokens, both ephemeral by
+design, no data of record to protect.

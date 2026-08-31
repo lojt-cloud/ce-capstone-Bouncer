@@ -216,3 +216,12 @@ secret's ARN) attached to Foundation's existing app role, same pattern
 Compute used for its S3 artifact bucket. RDS itself sits in the private
 subnets with `db-sg` allowing inbound only from `app-sg` on 5432 --
 confirmed, not just configured, once connectivity is tested below.
+
+Redis is encrypted at rest and in transit (`transit_encryption_mode =
+required`, TLS-only, no plaintext fallback) plus a generated AUTH token in
+its own Secrets Manager secret -- three independent layers (network via
+`cache-sg`, transport via TLS, application via AUTH) even though the
+security group alone already restricts access to the app tier. `cache-sg`
+allows inbound only from `app-sg` on 6379, same pattern as `db-sg`.
+Read/write/delete proven from a live app instance via `valkey-cli` over
+TLS with AUTH.
