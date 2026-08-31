@@ -1,0 +1,41 @@
+resource "aws_autoscaling_group" "app" {
+  count = var.enable_billable_resources ? 1 : 0
+
+  name                = "${var.project}-${var.environment}-app-asg"
+  min_size            = var.asg_min_size
+  max_size            = var.asg_max_size
+  desired_capacity    = var.asg_desired_capacity
+  vpc_zone_identifier = var.private_subnet_ids
+
+  launch_template {
+    id      = aws_launch_template.app.id
+    version = "$Latest"
+  }
+
+  # EC2 health checks for now -- switches to ELB once the ALB/target group
+  # exist in the next step. Lets us confirm instances boot and /health
+  # responds directly, before the ALB is in the loop at all.
+  health_check_type         = "EC2"
+  health_check_grace_period = 300
+
+  tag {
+    key                 = "Name"
+    value               = "${var.project}-${var.environment}-app"
+    propagate_at_launch = true
+  }
+}
+
+resource "aws_autoscaling_policy" "cpu_target_tracking" {
+  count = var.enable_billable_resources ? 1 : 0
+
+  name                   = "${var.project}-${var.environment}-app-cpu-target-tracking"
+  autoscaling_group_name = aws_autoscaling_group.app[0].name
+  policy_type            = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+    target_value = 60.0
+  }
+}

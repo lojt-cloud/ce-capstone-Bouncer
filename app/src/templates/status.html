@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bouncer — Tier Status</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 40px 20px; background-color: #0b1329; color: #fff; display: flex; justify-content: center; }
+    .container { background: #172036; padding: 30px; border-radius: 12px; max-width: 650px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+    h1 { margin-top: 0; font-size: 24px; }
+    .subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 25px; }
+    .tier { margin: 15px 0; padding: 20px; background: #232d47; border-radius: 8px; }
+    .tier h2 { margin-top: 0; font-size: 18px; }
+    .tier p { margin: 8px 0; color: #cbd5e1; font-size: 14px; }
+    .data { color: #38bdf8; font-weight: bold; font-family: monospace; }
+    .badge { padding: 4px 12px; border-radius: 12px; font-weight: bold; font-size: 13px; }
+    .badge-ok { background: #22c55e; color: #000; }
+    .badge-warn { background: #f59e0b; color: #000; }
+    .badge-down { background: #ef4444; color: #fff; }
+    pre { background: #0b1329; padding: 12px; border-radius: 6px; color: #38bdf8; overflow-x: auto; font-size: 13px; border: 1px solid #334155; }
+    button { padding: 8px 16px; background-color: #22c55e; color: #000; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+    button:hover { background-color: #16a34a; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Bouncer</h1>
+    <div class="subtitle">Event-ticketing platform with anti-scalping defense — tier status</div>
+
+    <div class="tier">
+      <h2>Tier 1: Presentation (ALB)</h2>
+      <p>Traffic routed via Application Load Balancer across public subnets.</p>
+      <button onclick="checkHealth()">Check /health</button>
+      <pre id="health-output" style="display:none;"></pre>
+    </div>
+
+    <div class="tier">
+      <h2>Tier 2: Application (Auto Scaling Group)</h2>
+      <p>Instance ID: <span class="data">{{ instance_id }}</span></p>
+      <p>Availability Zone: <span class="data">{{ az }}</span></p>
+    </div>
+
+    <div class="tier">
+      <h2>Tier 3: Data (RDS, Single-AZ)</h2>
+      {% if db.configured %}
+        {% if db.status == "connected" %}
+        <p>Database: <span class="badge badge-ok">CONNECTED</span></p>
+        {% else %}
+        <p>Database: <span class="badge badge-down">UNREACHABLE</span></p>
+        {% endif %}
+      {% else %}
+        <p>Database: <span class="badge badge-warn">NOT YET PROVISIONED</span></p>
+      {% endif %}
+      <p style="font-size:0.8em;color:#64748b;">Single-AZ is a deliberate cost trade-off for this project, not a capacity limit — Multi-AZ is documented as the production recommendation.</p>
+    </div>
+  </div>
+
+  <script>
+    async function checkHealth() {
+      try {
+        const res = await fetch('/health');
+        const data = await res.json();
+        const box = document.getElementById('health-output');
+        box.style.display = 'block';
+        box.innerText = JSON.stringify(data, null, 2);
+      } catch (e) {
+        console.error('health check failed', e);
+      }
+    }
+  </script>
+</body>
+</html>
