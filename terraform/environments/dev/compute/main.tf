@@ -19,10 +19,11 @@ module "compute" {
   app_instance_profile_name = data.terraform_remote_state.foundation.outputs.app_instance_profile_name
   app_role_arn              = data.terraform_remote_state.foundation.outputs.app_role_arn
 
-  ami_id         = var.ami_id
-  instance_type  = var.instance_type
-  app_port       = var.app_port
-  app_source_dir = "${path.module}/../../../../app/src"
+  ami_id            = var.ami_id
+  instance_type     = var.instance_type
+  app_port          = var.app_port
+  health_check_path = var.health_check_path
+  app_source_dir    = "${path.module}/../../../../app/src"
 
   asg_min_size              = var.asg_min_size
   asg_max_size              = var.asg_max_size

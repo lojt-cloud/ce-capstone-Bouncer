@@ -12,10 +12,9 @@ resource "aws_autoscaling_group" "app" {
     version = "$Latest"
   }
 
-  # EC2 health checks for now -- switches to ELB once the ALB/target group
-  # exist in the next step. Lets us confirm instances boot and /health
-  # responds directly, before the ALB is in the loop at all.
-  health_check_type         = "EC2"
+  target_group_arns = [aws_lb_target_group.app[0].arn]
+
+  health_check_type         = "ELB"
   health_check_grace_period = 300
 
   tag {

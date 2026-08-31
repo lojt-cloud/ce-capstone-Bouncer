@@ -22,6 +22,11 @@ variable "app_port" {
   default = 8000
 }
 
+variable "health_check_path" {
+  type    = string
+  default = "/health"
+}
+
 variable "app_source_dir" {
   description = "Path to app/src, zipped and uploaded as the initial deploy artifact."
   type        = string
@@ -48,7 +53,7 @@ variable "asg_desired_capacity" {
 }
 
 variable "enable_billable_resources" {
-  description = "Gates the ASG (billable EC2). Off between work sessions to control cost."
+  description = "Gates the ASG and ALB (billable EC2/ALB). Off between work sessions to control cost."
   type        = bool
   default     = true
 }

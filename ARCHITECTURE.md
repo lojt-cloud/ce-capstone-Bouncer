@@ -59,3 +59,29 @@ SECURITY.md for what that implies for credential blast radius.
 Still open: `terraform-apply.yml` (merge-triggered apply), scheduled
 drift detection, and wiring branch protection's required status check to
 the plan job.
+
+## Compute Layer
+
+EC2 instances run in an Auto Scaling Group (min 3, max 6, desired 3) spread
+across all three AZs, behind an Application Load Balancer. Instances launch
+from a launch template pinned to a fixed AL2023 AMI (never a "most recent"
+lookup, so re-applies stay reproducible) and run Flask/Gunicorn on port 8000.
+Health checks hit `/health`; the ASG uses ELB health checks (not just EC2),
+so an instance that's up but not actually serving traffic gets replaced.
+
+Scaling is target-tracking on average ASG CPU utilization (60% target) — a
+static min=max=3 fleet would use the ASG resource without demonstrating
+actual scaling behavior, so this gives the Auto Scaling requirement a real
+policy to point at.
+
+App code deploys via a small S3 artifact bucket rather than being baked
+into the launch template's user_data: `app/deploy.sh` zips `app/src`,
+uploads it to S3, and triggers an ASG instance refresh. This decouples
+app-code releases from Terraform applies and is the shape the CI/CD
+module's eventual deploy step will plug into. The bucket is versioned
+with a lifecycle rule expiring noncurrent versions after 30 days.
+
+The ALB currently listens on HTTP (port 80) only — HTTPS/ACM is the
+Route53+ACM module's scope, not built here. The ASG and ALB are both
+gated behind `enable_billable_resources`, extending the same on/off
+toggle convention Foundation established for the NAT Gateway.
