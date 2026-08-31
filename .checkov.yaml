@@ -48,6 +48,29 @@ skip-check:
   # git — if lost, deploy.sh just re-runs and re-uploads. No DR value in
   # replicating a rebuildable deploy artifact cross-region.
   - CKV_AWS_144
+  # ALB deletion protection deliberately off -- it's gated behind
+  # enable_billable_resources and meant to be destroyed/recreated between
+  # work sessions to control cost. Deletion protection would block that.
+  - CKV_AWS_150
+  # Same trade-off as the app-artifact bucket (CKV_AWS_18 above): ALB
+  # access logging needs its own S3 bucket + policy for negligible benefit
+  # at this traffic volume (capstone demo, not production load).
+  - CKV_AWS_91
+  # HTTPS listener + ACM cert are the Route53/ACM module's scope (see
+  # 00-shared-context.md), not built yet. This HTTP listener is complete
+  # for now; a companion HTTPS listener and TLS policy land there.
+  - CKV_AWS_2
+  - CKV_AWS_103
+  # ALB-to-target traffic stays HTTP within the private VPC (target group
+  # only reachable via app-sg, itself only reachable from alb-sg). TLS
+  # terminates at the ALB edge once the HTTPS listener lands; full
+  # edge-to-instance TLS needs per-instance certs, out of scope at this
+  # scale without a service mesh.
+  - CKV_AWS_378
+  # WAF is a planned resource for this project (00-shared-context.md's
+  # on/off toggle list includes it) but isn't built yet — not this
+  # module's scope. Will attach to this ALB when it lands.
+  - CKV2_AWS_28
 
 compact: true
 quiet: true

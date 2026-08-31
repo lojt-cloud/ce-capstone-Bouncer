@@ -14,6 +14,11 @@ variable "app_port" {
   default = 8000
 }
 
+variable "health_check_path" {
+  type    = string
+  default = "/health"
+}
+
 variable "asg_min_size" {
   type    = number
   default = 3
