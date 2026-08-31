@@ -25,15 +25,16 @@ resource "aws_launch_template" "app" {
   }
 
   user_data = base64encode(templatefile("${path.module}/templates/user_data.sh.tpl", {
-    aws_region       = var.aws_region
-    app_bucket       = aws_s3_bucket.app_artifacts.bucket
-    app_artifact_key = aws_s3_object.app_zip.key
-    app_port         = var.app_port
+    aws_region        = var.aws_region
+    app_bucket        = aws_s3_bucket.app_artifacts.bucket
+    app_artifact_key  = aws_s3_object.app_zip.key
+    app_port          = var.app_port
+    db_secret_name    = var.db_secret_name
+    cache_secret_name = var.cache_secret_name
     cw_agent_config = templatefile("${path.module}/templates/cw-agent-config.json.tpl", {
       app_log_group_name = aws_cloudwatch_log_group.app.name
     })
   }))
-
   tag_specifications {
     resource_type = "instance"
     tags          = { Name = "${var.project}-${var.environment}-app" }
