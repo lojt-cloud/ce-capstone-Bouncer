@@ -71,6 +71,50 @@ skip-check:
   # on/off toggle list includes it) but isn't built yet — not this
   # module's scope. Will attach to this ALB when it lands.
   - CKV2_AWS_28
+    # Single-AZ RDS and single-node ElastiCache (no automatic failover) are
+  # locked decisions -- see 00-shared-context.md and COSTS.md's Data Tier
+  # section. Multi-AZ/failover documented as the production recommendation.
+  - CKV_AWS_157
+  - CKV2_AWS_50
+  # RDS deletion protection deliberately off -- same trade-off as
+  # CKV_AWS_150 (ALB) above: this instance is gated behind
+  # enable_billable_resources and meant to be destroyed/recreated between
+  # work sessions. Deletion protection would block that toggle.
+  - CKV_AWS_293
+  # Same trade-off as CKV_AWS_158/CKV_AWS_145 above: default AWS-managed
+  # encryption (RDS storage_encrypted, ElastiCache at-rest, Secrets Manager)
+  # already covers encryption at rest. A customer-managed KMS key adds
+  # ~$1/mo + key-policy overhead per resource for a dev capstone with
+  # nothing sensitive enough to warrant it.
+  - CKV_AWS_191
+  - CKV_AWS_149
+  # RDS Performance Insights: unsupported on t3/t4g.micro for MySQL/MariaDB
+  # per AWS docs; PostgreSQL support at this instance class is unconfirmed
+  # in the docs and not worth risking an apply-time rejection to test
+  # against a live environment for a discretionary observability feature.
+  # Revisit if this instance is ever upsized past *.micro.
+  - CKV_AWS_353
+  # RDS Enhanced Monitoring: adds an IAM monitoring role plus ongoing
+  # CloudWatch Logs ingestion for OS-level metrics at 1-60s granularity --
+  # not warranted at this scale; CloudWatch agent + basic RDS metrics
+  # (already the observability module's job) cover this capstone's needs.
+  - CKV_AWS_118
+  # RDS IAM database authentication: would need the app's DB connection
+  # code to switch from the Secrets Manager password pattern (used
+  # consistently everywhere else in this project -- S3, this same
+  # instance) to IAM auth tokens. Orthogonal redesign, out of scope here.
+  - CKV_AWS_161
+  # Deep Postgres query logging (log_statement) needs a custom DB
+  # parameter group and adds log volume/cost for a discretionary
+  # observability enhancement -- CKV_AWS_129 (server log export to
+  # CloudWatch) is enabled instead, which already covers connections,
+  # errors, and general server activity.
+  - CKV2_AWS_30
+  # Secrets Manager automatic rotation needs a dedicated Lambda rotation
+  # function -- real infra for dev/demo credentials that get destroyed and
+  # regenerated with the resource anyway (RDS/ElastiCache toggle). A
+  # production deployment would add this.
+  - CKV2_AWS_57
 
 compact: true
 quiet: true
