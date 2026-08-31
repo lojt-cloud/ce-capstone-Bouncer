@@ -28,3 +28,13 @@ variable "enable_billable_resources" {
   type        = bool
   default     = true
 }
+
+variable "cache_node_type" {
+  type    = string
+  default = "cache.t4g.micro"
+}
+
+variable "cache_engine_version" {
+  type    = string
+  default = "7.1"
+}
