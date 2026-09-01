@@ -71,7 +71,7 @@ jobs:
             --subject "Bouncer dev: drift detected in $LAYER" \
             --message "Terraform detected drift in the $LAYER layer (dev).
 
-$MESSAGE"
+          $MESSAGE"
 
       - name: Publish error alert
         if: steps.plan.outputs.exitcode == '1'
@@ -84,7 +84,7 @@ $MESSAGE"
             --subject "Bouncer dev: drift check FAILED for $LAYER" \
             --message "The nightly terraform plan errored for the $LAYER layer (dev) — this is not drift, something is broken.
 
-$MESSAGE"
+          $MESSAGE"
 
       - name: Fail job if drift or error
         if: steps.plan.outputs.exitcode == '1' || steps.plan.outputs.exitcode == '2'
