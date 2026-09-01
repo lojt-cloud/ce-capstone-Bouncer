@@ -23,6 +23,7 @@ locals {
 # quota (a hard limit, not adjustable) once the S3 bucket's full set of read
 # permissions is included. Each statement is labeled by comment instead; the label
 # still shows up here and in `terraform plan` diffs, just not in the AWS console.
+
 data "aws_iam_policy_document" "deploy_compute" {
 
   # ReadOnly — Describe*/List* actions with no resource-level IAM support
@@ -282,6 +283,17 @@ data "aws_iam_policy_document" "deploy_compute" {
     effect    = "Allow"
     actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
     resources = ["arn:aws:s3:::ce-capstone-bouncer-tfstate-f7fc4b65/dev/compute/*"]
+  }
+
+  # TFStateObjectDataTierRead - read-only, single-object access to the
+  # data-tier state file. Needed by compute's terraform_remote_state data
+  # source (reads db_secret_name / cache_secret_name from it, added
+  # retroactively during the data-tier module). GetObject only, compute
+  # never writes to data-tier's prefix.
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["arn:aws:s3:::ce-capstone-bouncer-tfstate-f7fc4b65/dev/data-tier/terraform.tfstate"]
   }
 
   # TFStateList
