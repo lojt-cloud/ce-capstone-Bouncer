@@ -246,7 +246,12 @@ data "aws_iam_policy_document" "deploy_compute" {
     ]
   }
 
-  # AppRoleAttach — attach/detach compute's artifact-read policy to Foundation's app-role only
+  # RoleAttach — attach/detach compute's own scoped policies (the
+  # deploy-compute policy and the artifact-read policy) to their two
+  # target roles (the CI deploy role and Foundation's app-role). Merged
+  # from two separate statements to stay under IAM's 6,144-char managed
+  # policy quota — see SECURITY.md for the trade-off this accepts (either
+  # policy can attach to either role, not strictly the original pairing).
   statement {
     effect = "Allow"
     actions = [
@@ -254,27 +259,17 @@ data "aws_iam_policy_document" "deploy_compute" {
       "iam:DetachRolePolicy",
       "iam:ListAttachedRolePolicies",
     ]
-    resources = [data.terraform_remote_state.foundation.outputs.app_role_arn]
-    condition {
-      test     = "StringEquals"
-      variable = "iam:PolicyARN"
-      values   = ["arn:aws:iam::${local.account_id}:policy/${local.artifact_policy}"]
-    }
-  }
-
-  # DeployRoleAttach — attach/detach this policy to the deploy role only
-  statement {
-    effect = "Allow"
-    actions = [
-      "iam:AttachRolePolicy",
-      "iam:DetachRolePolicy",
-      "iam:ListAttachedRolePolicies",
+    resources = [
+      data.aws_iam_role.deploy.arn,
+      data.terraform_remote_state.foundation.outputs.app_role_arn,
     ]
-    resources = [data.aws_iam_role.deploy.arn]
     condition {
       test     = "StringEquals"
       variable = "iam:PolicyARN"
-      values   = ["arn:aws:iam::${local.account_id}:policy/${local.deploy_policy}"]
+      values = [
+        "arn:aws:iam::${local.account_id}:policy/${local.deploy_policy}",
+        "arn:aws:iam::${local.account_id}:policy/${local.artifact_policy}",
+      ]
     }
   }
 
