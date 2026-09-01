@@ -141,14 +141,14 @@ note below). Two jobs:
 1. `fmt + checkov` — `terraform fmt -check`, then a full Checkov scan of
    `terraform/` against `.checkov.yaml`. No AWS credentials needed; fails
    fast before spending time on a real plan.
-2. `plan` — matrixed per layer (`foundation`, `compute` currently;
-   `data-tier` not yet wired, see below). Assumes the OIDC deploy role,
+2. `plan` — matrixed per layer (`foundation`, `compute`, `data-tier`).
+   Assumes the OIDC deploy role,
    runs `terraform plan`, posts the output as a PR comment even on
    failure (so the reviewer sees the real error, not just a red X).
 
 **Apply** (`.github/workflows/terraform-apply.yml`) — triggers on push to
 `main` (i.e. on PR merge) that touches `terraform/**` or the workflow file
-itself. Same matrix scope as plan currently (`foundation`, `compute`),
+itself. Same matrix scope as plan (`foundation`, `compute`, `data-tier`),
 same OIDC role. Runs `terraform apply -auto-approve`, writes the output to
 the run's job summary.
 
@@ -169,9 +169,16 @@ troubleshooting docs), not a bug in this setup.
 **Billable-resource on/off toggle**: each layer's `enable_billable_resources`
 lives in a committed `dev.auto.tfvars` (`terraform/environments/dev/<layer>/`),
 not a runtime flag — both local Terraform and CI load it automatically.
-To bring a CI-wired layer (foundation, compute) back up: flip that file to
-`true`, open a PR, merge — the apply workflow does the real `terraform
-apply`. `data-tier` isn't CI-wired yet, so still requires a local apply.
+To bring any layer back up: flip that file to `true`, open a PR, merge —
+the apply workflow does the real `terraform apply`. All three layers
+(foundation, compute, data-tier) are now CI-wired end to end (plan, apply,
+drift detection). **Caveat:** data-tier's RDS/ElastiCache create/destroy
+path through the deploy role has not actually been exercised yet — the
+policy was verified against a clean read-only plan and a 0-change apply
+while the toggle is off, same starting position foundation and compute
+were in before their first real create. Expect the possibility of a
+missing write-path permission the first time this toggle actually flips
+true through CI, per the standing lesson in `00-shared-context.md`.
 `./teardown.sh` writes `false` into all three layers' files and applies
 foundation/compute/data-tier locally in dependency order — run it, then
 commit the resulting `dev.auto.tfvars` changes so CI doesn't try to undo
@@ -180,7 +187,7 @@ them on the next merge.
 **Drift detection** (`.github/workflows/drift-detection.yml`) — scheduled
 nightly at `0 3 * * *` UTC (roughly 4-5am Central Europe, depending on
 DST), plus `workflow_dispatch` for manual runs. Same matrix scope as plan
-and apply (`foundation`, `compute`; `data-tier` not yet wired). Runs
+and apply (`foundation`, `compute`, `data-tier`). Runs
 `terraform plan -detailed-exitcode` per layer: exit 0 means clean (no
 alert, job passes), exit 2 means real drift was detected (out-of-band
 change, or the environment doesn't match its `dev.auto.tfvars` toggle),
