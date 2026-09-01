@@ -81,6 +81,7 @@ data "aws_iam_policy_document" "deploy_data_tier" {
     resources = [
       "arn:aws:elasticache:${local.aws_region}:${local.account_id}:replicationgroup:${local.project}-${local.environment}-cache",
       "arn:aws:elasticache:${local.aws_region}:${local.account_id}:parametergroup:*",
+      "arn:aws:elasticache:${local.aws_region}:${local.account_id}:subnetgroup:${local.project}-${local.environment}-cache",
     ]
   }
 
