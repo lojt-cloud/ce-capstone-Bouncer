@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        layer: [foundation, compute]
+        layer: [foundation, compute, data-tier]
     defaults:
       run:
         working-directory: terraform/environments/dev/${{ matrix.layer }}
