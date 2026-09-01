@@ -41,6 +41,17 @@ resource "aws_s3_object" "app_zip" {
   key    = "app.zip"
   source = data.archive_file.app.output_path
   etag   = data.archive_file.app.output_md5
+
+  # app.zip is deliberately deployed outside Terraform (app/deploy.sh
+  # uploads it directly, decoupling app releases from infra applies -- see
+  # ARCHITECTURE.md). Without this, terraform apply would overwrite
+  # whatever's currently deployed with a fresh build from this checkout's
+  # app/src on every unrelated infra change, once apply runs automatically
+  # in CI. Bootstrap-only: creates the object once if missing, then
+  # Terraform stops managing its content.
+  lifecycle {
+    ignore_changes = [source, etag]
+  }
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "app_artifacts" {
