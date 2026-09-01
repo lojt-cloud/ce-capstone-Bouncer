@@ -18,6 +18,11 @@ user, and confirmed login worked end to end via the ALB.
 
 ## Reseeding test users after RDS recreate
 
+**Automated:** `scripts/reseed-test-user.sh <username> <password>` does
+the steps below non-interactively via SSM Run Command and verifies login
+against the ALB — use this for demos. The manual walkthrough remains for
+troubleshooting when the script fails partway.
+
 Whenever RDS is destroyed and recreated (the `enable_billable_resources`
 toggle off/on in `terraform/environments/dev/data-tier`, or any other
 reason the instance gets replaced), the `users` table schema recreates
