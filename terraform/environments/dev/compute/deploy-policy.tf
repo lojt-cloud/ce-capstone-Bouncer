@@ -307,6 +307,38 @@ data "aws_iam_policy_document" "deploy_compute" {
       values   = ["dev/compute/*"]
     }
   }
+  # RunInstancesViaLaunchTemplate — ec2:RunInstances also checks IAM against
+  # every resource a launch touches (AMI, subnet, security group, the new
+  # instance/volume/network-interface), not just the ASG or launch template.
+  # Rather than enumerating each resource type, this authorizes RunInstances
+  # on everything EXCEPT the launch-template resource itself, conditioned on
+  # the call using a launch template with no overrides — so the deploy role
+  # can only ever launch instances exactly as the launch template defines,
+  # never with a substituted AMI/subnet/SG. AWS's own documented pattern:
+  # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ExamplePolicies_EC2.html#iam-example-runinstances-launch-templates
+  statement {
+    effect        = "Allow"
+    actions       = ["ec2:RunInstances"]
+    not_resources = ["arn:aws:ec2:${local.aws_region}:${local.account_id}:launch-template/*"]
+    condition {
+      test     = "ArnLike"
+      variable = "ec2:LaunchTemplate"
+      values   = ["arn:aws:ec2:${local.aws_region}:${local.account_id}:launch-template/*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "ec2:IsLaunchTemplateResource"
+      values   = ["true"]
+    }
+  }
+
+  # RunInstancesLaunchTemplateResource — RunInstances checks the launch
+  # template ARN as its own separate resource type from what it references.
+  statement {
+    effect    = "Allow"
+    actions   = ["ec2:RunInstances"]
+    resources = ["arn:aws:ec2:${local.aws_region}:${local.account_id}:launch-template/*"]
+  }
 }
 
 resource "aws_iam_policy" "deploy_compute" {
