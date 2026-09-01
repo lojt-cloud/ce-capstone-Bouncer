@@ -39,7 +39,7 @@ jobs:
       fail-fast: false
       matrix:
         # add each new layer here once it's built
-        layer: [foundation]
+        layer: [foundation, compute]
     defaults:
       run:
         working-directory: terraform/environments/dev/${{ matrix.layer }}
