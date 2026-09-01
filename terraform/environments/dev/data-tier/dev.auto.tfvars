@@ -1,1 +1,2 @@
-enable_billable_resources = false
+enable_billable_resources = true
+
