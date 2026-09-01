@@ -135,8 +135,9 @@ reconcile state:
 
 ## CI/CD Pipeline
 
-**Plan** (`.github/workflows/terraform-plan.yml`) — triggers on any PR that
-touches `terraform/**` or the workflow file itself. Two jobs:
+**Plan** (`.github/workflows/terraform-plan.yml`) — triggers on every PR,
+unconditionally (no path filter — see why in the required-status-check
+note below). Two jobs:
 1. `fmt + checkov` — `terraform fmt -check`, then a full Checkov scan of
    `terraform/` against `.checkov.yaml`. No AWS credentials needed; fails
    fast before spending time on a real plan.
@@ -153,9 +154,17 @@ the run's job summary.
 
 **Branch protection** enforces the PR flow: `main` requires a PR for every
 change (`enforce_admins: true` — applies even to the repo owner, no direct
-push), 0 required approvals, force-push and deletion disabled. **Required
-status checks are not yet wired to the plan job** — a PR can currently
-merge even if `plan` failed; that's the next open CI/CD item.
+push), 0 required approvals, force-push and deletion disabled. **One
+required status check, `All checks passed`** — a fan-in job in
+`terraform-plan.yml` that depends on the whole `fmt+checkov`/`plan`
+matrix and reports a single pass/fail, so branch protection never needs
+reconfiguring as the matrix grows (e.g. when `data-tier` is added).
+`strict: true` also means a PR's branch must be up to date with `main`
+before it can merge. This is also why `plan` has no path filter: a
+required check tied to a path-filtered workflow gets stuck "Pending"
+forever on any PR that doesn't touch those paths — a known,
+still-unresolved GitHub limitation (confirmed via GitHub's own
+troubleshooting docs), not a bug in this setup.
 
 **Billable-resource on/off toggle**: each layer's `enable_billable_resources`
 lives in a committed `dev.auto.tfvars` (`terraform/environments/dev/<layer>/`),
