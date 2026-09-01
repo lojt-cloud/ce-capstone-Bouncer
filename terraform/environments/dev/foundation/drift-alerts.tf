@@ -37,7 +37,10 @@ data "aws_iam_policy_document" "deploy_foundation_sns" {
     resources = [aws_sns_topic.drift_alerts.arn]
   }
 
-  # Subscription-level actions (subscription ARN = topic ARN + :subscription-id)
+  # Subscription-level actions — SNS defines no "subscription" resource type
+  # for IAM purposes (only "topic"), so these three actions have no
+  # resource-level permission support at all and require Resource: "*".
+  # Confirmed via AWS's SNS service-authorization reference.
   statement {
     effect = "Allow"
     actions = [
@@ -45,7 +48,7 @@ data "aws_iam_policy_document" "deploy_foundation_sns" {
       "sns:GetSubscriptionAttributes",
       "sns:SetSubscriptionAttributes",
     ]
-    resources = ["${aws_sns_topic.drift_alerts.arn}:*"]
+    resources = ["*"]
   }
 }
 
