@@ -24,7 +24,7 @@ jobs:
         # converges to whatever's actually committed, never a stale
         # default. Add data-tier once it has its own scoped deploy-role
         # policy.
-        layer: [foundation, compute]
+        layer: [foundation, compute, data-tier]
     defaults:
       run:
         working-directory: terraform/environments/dev/${{ matrix.layer }}
