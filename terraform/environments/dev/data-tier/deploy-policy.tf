@@ -24,7 +24,10 @@ data "aws_iam_policy_document" "deploy_data_tier" {
       "rds:DeleteDBInstance",
       "rds:ModifyDBInstance",
     ]
-    resources = ["arn:aws:rds:${local.aws_region}:${local.account_id}:db:${local.project}-${local.environment}-db"]
+    resources = [
+      "arn:aws:rds:${local.aws_region}:${local.account_id}:db:${local.project}-${local.environment}-db",
+      "arn:aws:rds:${local.aws_region}:${local.account_id}:subgrp:${local.project}-${local.environment}-db",
+    ]
   }
 
   # RDSSubnetGroupManage
@@ -75,7 +78,11 @@ data "aws_iam_policy_document" "deploy_data_tier" {
       "elasticache:DeleteReplicationGroup",
       "elasticache:ModifyReplicationGroup",
     ]
-    resources = ["arn:aws:elasticache:${local.aws_region}:${local.account_id}:replicationgroup:${local.project}-${local.environment}-cache"]
+    resources = [
+      "arn:aws:elasticache:${local.aws_region}:${local.account_id}:replicationgroup:${local.project}-${local.environment}-cache",
+      "arn:aws:elasticache:${local.aws_region}:${local.account_id}:parametergroup:*",
+      "arn:aws:elasticache:${local.aws_region}:${local.account_id}:subnetgroup:${local.project}-${local.environment}-cache",
+    ]
   }
 
   # ElastiCacheSubnetGroupManage
