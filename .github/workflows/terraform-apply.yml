@@ -1,0 +1,62 @@
+name: Terraform Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform-apply.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply:
+    name: apply (${{ matrix.layer }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # add a layer here only once you're ready for every future merge
+        # touching it to auto-apply for real. compute is deliberately not
+        # here yet — its ASG/ALB are destroyed right now (cost), and
+        # adding it here would auto-recreate them on the next matching
+        # merge. See 00-shared-context.md before adding compute or
+        # data-tier.
+        layer: [foundation]
+    defaults:
+      run:
+        working-directory: terraform/environments/dev/${{ matrix.layer }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.0
+          terraform_wrapper: true
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::743631836010:role/ce-capstone-bouncer-deploy
+          aws-region: eu-central-1
+      - name: terraform init
+        run: terraform init
+      - name: terraform apply
+        id: apply
+        run: terraform apply -auto-approve -input=false -no-color
+        continue-on-error: true
+      - name: Job summary
+        if: always()
+        env:
+          APPLY_OUT: ${{ steps.apply.outputs.stdout }}
+          LAYER: ${{ matrix.layer }}
+        run: |
+          {
+            echo "### Terraform Apply — \`$LAYER\`"
+            echo '```'
+            echo "$APPLY_OUT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Fail if apply failed
+        if: steps.apply.outcome == 'failure'
+        run: exit 1
