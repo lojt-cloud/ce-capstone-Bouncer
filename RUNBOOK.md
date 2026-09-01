@@ -132,3 +132,38 @@ reconcile state:
 
     aws ec2 release-address --allocation-id <id> --region eu-central-1
     terraform apply -var="enable_billable_resources=false"
+
+## CI/CD Pipeline
+
+**Plan** (`.github/workflows/terraform-plan.yml`) — triggers on any PR that
+touches `terraform/**` or the workflow file itself. Two jobs:
+1. `fmt + checkov` — `terraform fmt -check`, then a full Checkov scan of
+   `terraform/` against `.checkov.yaml`. No AWS credentials needed; fails
+   fast before spending time on a real plan.
+2. `plan` — matrixed per layer (`foundation`, `compute` currently;
+   `data-tier` not yet wired, see below). Assumes the OIDC deploy role,
+   runs `terraform plan`, posts the output as a PR comment even on
+   failure (so the reviewer sees the real error, not just a red X).
+
+**Apply** (`.github/workflows/terraform-apply.yml`) — triggers on push to
+`main` (i.e. on PR merge) that touches `terraform/**` or the workflow file
+itself. Same matrix scope as plan currently (`foundation`, `compute`),
+same OIDC role. Runs `terraform apply -auto-approve`, writes the output to
+the run's job summary.
+
+**Branch protection** enforces the PR flow: `main` requires a PR for every
+change (`enforce_admins: true` — applies even to the repo owner, no direct
+push), 0 required approvals, force-push and deletion disabled. **Required
+status checks are not yet wired to the plan job** — a PR can currently
+merge even if `plan` failed; that's the next open CI/CD item.
+
+**Billable-resource on/off toggle**: each layer's `enable_billable_resources`
+lives in a committed `dev.auto.tfvars` (`terraform/environments/dev/<layer>/`),
+not a runtime flag — both local Terraform and CI load it automatically.
+To bring a CI-wired layer (foundation, compute) back up: flip that file to
+`true`, open a PR, merge — the apply workflow does the real `terraform
+apply`. `data-tier` isn't CI-wired yet, so still requires a local apply.
+`./teardown.sh` writes `false` into all three layers' files and applies
+foundation/compute/data-tier locally in dependency order — run it, then
+commit the resulting `dev.auto.tfvars` changes so CI doesn't try to undo
+them on the next merge.
