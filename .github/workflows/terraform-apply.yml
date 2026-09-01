@@ -18,13 +18,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # add a layer here only once you're ready for every future merge
-        # touching it to auto-apply for real. compute is deliberately not
-        # here yet — its ASG/ALB are destroyed right now (cost), and
-        # adding it here would auto-recreate them on the next matching
-        # merge. See 00-shared-context.md before adding compute or
-        # data-tier.
-        layer: [foundation]
+        # each layer's on/off state is git-tracked via its own
+        # dev.auto.tfvars (enable_billable_resources) — local terraform and
+        # this job load the same file automatically, so apply always
+        # converges to whatever's actually committed, never a stale
+        # default. Add data-tier once it has its own scoped deploy-role
+        # policy.
+        layer: [foundation, compute]
     defaults:
       run:
         working-directory: terraform/environments/dev/${{ matrix.layer }}

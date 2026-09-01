@@ -59,7 +59,14 @@ data "aws_iam_policy_document" "deploy_foundation" {
       "ec2:DeleteVpc", "ec2:ModifyVpcAttribute", "ec2:ModifySubnetAttribute",
       "ec2:ReleaseAddress", "ec2:DetachInternetGateway",
       "ec2:DisassociateRouteTable", "ec2:ReplaceRoute",
-      "ec2:ReplaceRouteTableAssociation"
+      "ec2:ReplaceRouteTableAssociation",
+      # CreateNatGateway supports resource-level permissions, but checks them
+      # against the pre-existing Elastic IP it attaches to as well as the new
+      # NAT gateway. That EIP is never tagged in this request, so an
+      # aws:RequestTag/Project condition (used in NetworkingCreate above)
+      # can never be satisfied for it. Confirmed via a real 403 on a CI
+      # apply run, not a hypothetical.
+      "ec2:CreateNatGateway"
     ]
     resources = ["*"]
   }
@@ -69,7 +76,7 @@ data "aws_iam_policy_document" "deploy_foundation" {
     effect = "Allow"
     actions = [
       "ec2:CreateVpc", "ec2:CreateSubnet", "ec2:CreateInternetGateway",
-      "ec2:CreateNatGateway", "ec2:AllocateAddress", "ec2:CreateRouteTable",
+      "ec2:AllocateAddress", "ec2:CreateRouteTable",
       "ec2:CreateSecurityGroup"
     ]
     resources = ["*"]
