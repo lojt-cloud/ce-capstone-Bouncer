@@ -41,6 +41,7 @@ data "aws_iam_policy_document" "deploy_compute" {
       "elasticloadbalancing:DescribeTargetGroups",
       "elasticloadbalancing:DescribeListeners",
       "elasticloadbalancing:DescribeListenerAttributes",
+      "elasticloadbalancing:DescribeTargetHealth",
       "elasticloadbalancing:DescribeLoadBalancerAttributes",
       "elasticloadbalancing:DescribeTargetGroupAttributes",
       "elasticloadbalancing:DescribeTags",
