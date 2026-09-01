@@ -318,7 +318,7 @@ data "aws_iam_policy_document" "deploy_compute" {
   # confirmed case of this project's "looks scopeable, isn't" IAM pattern.
   statement {
     effect    = "Allow"
-    actions   = ["ec2:RunInstances"]
+    actions   = ["ec2:RunInstances", "ec2:CreateTags"]
     resources = ["*"]
   }
 }
