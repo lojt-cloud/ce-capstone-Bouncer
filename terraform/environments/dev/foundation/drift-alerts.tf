@@ -20,10 +20,32 @@ data "aws_iam_role" "deploy" {
 }
 
 data "aws_iam_policy_document" "deploy_foundation_sns" {
+  # Topic-level actions
   statement {
-    effect    = "Allow"
-    actions   = ["sns:Publish"]
+    effect = "Allow"
+    actions = [
+      "sns:CreateTopic",
+      "sns:DeleteTopic",
+      "sns:GetTopicAttributes",
+      "sns:SetTopicAttributes",
+      "sns:TagResource",
+      "sns:UntagResource",
+      "sns:ListTagsForResource",
+      "sns:Publish",
+      "sns:Subscribe",
+    ]
     resources = [aws_sns_topic.drift_alerts.arn]
+  }
+
+  # Subscription-level actions (subscription ARN = topic ARN + :subscription-id)
+  statement {
+    effect = "Allow"
+    actions = [
+      "sns:Unsubscribe",
+      "sns:GetSubscriptionAttributes",
+      "sns:SetSubscriptionAttributes",
+    ]
+    resources = ["${aws_sns_topic.drift_alerts.arn}:*"]
   }
 }
 
