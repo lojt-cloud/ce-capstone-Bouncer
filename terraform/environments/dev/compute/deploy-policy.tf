@@ -303,27 +303,23 @@ data "aws_iam_policy_document" "deploy_compute" {
     }
   }
 
-  # RunInstancesViaLaunchTemplate — ec2:RunInstances checks IAM against
-  # every resource a launch touches (AMI, subnet, security group, the
-  # launch template itself, the new instance/volume/network-interface).
-  # Resource "*" here is scoped tight by the conditions: only requests
-  # using one of this account's own launch templates verbatim (no
-  # overriding its AMI/subnet/SG) are allowed. AWS's documented pattern:
-  # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ExamplePolicies_EC2.html#iam-example-runinstances-launch-templates
+  # RunInstances — autoscaling:CreateAutoScalingGroup internally requires
+  # ec2:RunInstances to launch instances from the launch template (AWS's
+  # documented requirement: docs.aws.amazon.com/AWSEC2/latest/UserGuide/
+  # permissions-for-launch-templates.html). Unconditioned Resource "*",
+  # matching AWS's own primary example policy for this exact scenario.
+  # The ec2:LaunchTemplate / ec2:IsLaunchTemplateResource condition keys
+  # were tried first (AWS's "restrict to one launch template" pattern)
+  # but confirmed via repeated real 403s NOT to apply here — the Auto
+  # Scaling service-authorization reference for CreateAutoScalingGroup
+  # lists no launch-template condition key at all, confirming those two
+  # keys only populate on a *direct* ec2:RunInstances/CreateFleet call,
+  # not on the internal check CreateAutoScalingGroup performs. Eighth
+  # confirmed case of this project's "looks scopeable, isn't" IAM pattern.
   statement {
     effect    = "Allow"
     actions   = ["ec2:RunInstances"]
     resources = ["*"]
-    condition {
-      test     = "ArnLike"
-      variable = "ec2:LaunchTemplate"
-      values   = ["arn:aws:ec2:${local.aws_region}:${local.account_id}:launch-template/*"]
-    }
-    condition {
-      test     = "Bool"
-      variable = "ec2:IsLaunchTemplateResource"
-      values   = ["true"]
-    }
   }
 }
 
