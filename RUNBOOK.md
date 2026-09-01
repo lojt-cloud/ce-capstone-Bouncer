@@ -204,3 +204,5 @@ supplemental IAM policy on the deploy role scoped to just this topic. Not
 gated by the billable-resources toggle — negligible cost, stays alive
 through a full teardown so the nightly check can still confirm "nothing
 drifted" even when the environment is intentionally off.
+
+Recreating the RDS instance or ElastiCache replication group (toggle, replacement, or manual recreate) always forces a replacement of its Secrets Manager secret version too — the secret's JSON payload embeds the live endpoint address, which is unknown until the new resource exists. This is expected, not a bug; the secret container itself never gets destroyed.
