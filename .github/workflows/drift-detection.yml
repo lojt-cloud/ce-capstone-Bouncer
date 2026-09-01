@@ -1,0 +1,91 @@
+name: Nightly Drift Detection
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  drift-check:
+    name: drift-check (${{ matrix.layer }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        layer: [foundation, compute]
+    defaults:
+      run:
+        working-directory: terraform/environments/dev/${{ matrix.layer }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.0
+          terraform_wrapper: true
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::743631836010:role/ce-capstone-bouncer-deploy
+          aws-region: eu-central-1
+
+      - name: terraform init
+        run: terraform init
+
+      - name: terraform plan (detect drift)
+        id: plan
+        run: |
+          set +e
+          terraform plan -detailed-exitcode -input=false -no-color > plan_output.txt 2>&1
+          echo "exitcode=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          cat plan_output.txt
+
+      - name: Job summary
+        if: always()
+        env:
+          LAYER: ${{ matrix.layer }}
+          EXIT_CODE: ${{ steps.plan.outputs.exitcode }}
+        run: |
+          {
+            echo "### Drift Check — \`$LAYER\`"
+            echo "Exit code: \`$EXIT_CODE\` (0 = no drift, 1 = error, 2 = drift detected)"
+            echo '```'
+            cat plan_output.txt 2>/dev/null || echo "No plan output captured."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish drift alert
+        if: steps.plan.outputs.exitcode == '2'
+        env:
+          LAYER: ${{ matrix.layer }}
+        run: |
+          MESSAGE=$(head -c 100000 plan_output.txt)
+          aws sns publish \
+            --topic-arn arn:aws:sns:eu-central-1:743631836010:ce-capstone-bouncer-dev-drift-alerts \
+            --subject "Bouncer dev: drift detected in $LAYER" \
+            --message "Terraform detected drift in the $LAYER layer (dev).
+
+$MESSAGE"
+
+      - name: Publish error alert
+        if: steps.plan.outputs.exitcode == '1'
+        env:
+          LAYER: ${{ matrix.layer }}
+        run: |
+          MESSAGE=$(head -c 100000 plan_output.txt)
+          aws sns publish \
+            --topic-arn arn:aws:sns:eu-central-1:743631836010:ce-capstone-bouncer-dev-drift-alerts \
+            --subject "Bouncer dev: drift check FAILED for $LAYER" \
+            --message "The nightly terraform plan errored for the $LAYER layer (dev) — this is not drift, something is broken.
+
+$MESSAGE"
+
+      - name: Fail job if drift or error
+        if: steps.plan.outputs.exitcode == '1' || steps.plan.outputs.exitcode == '2'
+        run: exit 1
