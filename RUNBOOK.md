@@ -176,3 +176,24 @@ apply`. `data-tier` isn't CI-wired yet, so still requires a local apply.
 foundation/compute/data-tier locally in dependency order — run it, then
 commit the resulting `dev.auto.tfvars` changes so CI doesn't try to undo
 them on the next merge.
+
+**Drift detection** (`.github/workflows/drift-detection.yml`) — scheduled
+nightly at `0 3 * * *` UTC (roughly 4-5am Central Europe, depending on
+DST), plus `workflow_dispatch` for manual runs. Same matrix scope as plan
+and apply (`foundation`, `compute`; `data-tier` not yet wired). Runs
+`terraform plan -detailed-exitcode` per layer: exit 0 means clean (no
+alert, job passes), exit 2 means real drift was detected (out-of-band
+change, or the environment doesn't match its `dev.auto.tfvars` toggle),
+exit 1 means the plan itself errored. Exit 2 and exit 1 both publish to
+the SNS topic below with distinct subject lines and both fail the job, so
+drift and a broken check are never confused with each other — check the
+Actions tab if the nightly run shows red.
+
+**Alerting** — SNS topic `ce-capstone-bouncer-dev-drift-alerts`
+(`arn:aws:sns:eu-central-1:743631836010:ce-capstone-bouncer-dev-drift-alerts`),
+KMS-encrypted at rest, one email subscription. Defined in
+`terraform/environments/dev/foundation/drift-alerts.tf` alongside a
+supplemental IAM policy on the deploy role scoped to just this topic. Not
+gated by the billable-resources toggle — negligible cost, stays alive
+through a full teardown so the nightly check can still confirm "nothing
+drifted" even when the environment is intentionally off.
