@@ -5,7 +5,8 @@ variable "drift_alert_email" {
 }
 
 resource "aws_sns_topic" "drift_alerts" {
-  name = "${var.project_name}-${var.environment}-drift-alerts"
+  name              = "${var.project_name}-${var.environment}-drift-alerts"
+  kms_master_key_id = "alias/aws/sns"
 }
 
 resource "aws_sns_topic_subscription" "drift_alerts_email" {
