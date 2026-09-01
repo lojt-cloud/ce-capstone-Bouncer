@@ -2,6 +2,35 @@ resource "aws_autoscaling_group" "app" {
   count = var.enable_billable_resources ? 1 : 0
 
   name                = "${var.project}-${var.environment}-app-asg"
+    tag {
+    key                 = "Name"
+    value               = "${var.project}-${var.environment}-app"
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "Project"
+    value               = var.project
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "Environment"
+    value               = var.environment
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "Layer"
+    value               = "compute"
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "ManagedBy"
+    value               = "terraform"
+    propagate_at_launch = true
+  }
   min_size            = var.asg_min_size
   max_size            = var.asg_max_size
   desired_capacity    = var.asg_desired_capacity
