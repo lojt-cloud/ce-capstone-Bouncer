@@ -7,9 +7,11 @@ locals {
 module "compute" {
   source = "../../../modules/compute"
 
-  project     = local.project
-  environment = local.environment
-  aws_region  = local.aws_region
+  project         = local.project
+  environment     = local.environment
+  aws_region      = local.aws_region
+  domain_name     = "app.projectbouncer.org"
+  route53_zone_id = "Z09995842VAJQYF2C7UVK"
 
   vpc_id                    = data.terraform_remote_state.foundation.outputs.vpc_id
   private_subnet_ids        = data.terraform_remote_state.foundation.outputs.private_subnet_ids

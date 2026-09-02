@@ -26,6 +26,50 @@ locals {
 
 data "aws_iam_policy_document" "deploy_compute" {
 
+  # ACM — cert lifecycle for the HTTPS listener. RequestCertificate scoped
+  # the same as the rest; ACM cert ARNs get a random UUID at creation
+  # (unknowable in advance), so this can only scope to "any cert in this
+  # account/region," not the specific certificate -- same shape as the
+  # Secrets Manager name-pattern case. If RequestCertificate specifically
+  # 403s despite this, move just that action to Resource "*" (matching
+  # the CreateNatGateway/EIP precedent) -- would be case 16 of this
+  # project's "looks scopeable, isn't" pattern.
+  statement {
+    effect = "Allow"
+    actions = [
+      "acm:RequestCertificate",
+      "acm:DescribeCertificate",
+      "acm:DeleteCertificate",
+      "acm:AddTagsToCertificate",
+      "acm:ListTagsForCertificate",
+    ]
+    resources = ["arn:aws:acm:${local.aws_region}:${local.account_id}:certificate/*"]
+  }
+
+  # Route53 — validation + alias records on the app subdomain's existing
+  # hosted zone (created manually outside Terraform when the domain was
+  # delegated -- see 00-shared-context.md's Domain & DNS facts). Hardcoded
+  # the same way the tfstate bucket name is below, not a variable -- a
+  # fixed, known-in-advance account resource. GetChange is separate
+  # because change IDs are global, not per-zone, and unknowable before
+  # ChangeResourceRecordSets actually runs. Combined into one statement
+  # (two resources) for size, same trade-off already accepted for
+  # RoleAttach below -- harmless, no such action/resource combination
+  # exists on the real API.
+  statement {
+    effect = "Allow"
+    actions = [
+      "route53:GetHostedZone",
+      "route53:ChangeResourceRecordSets",
+      "route53:ListResourceRecordSets",
+      "route53:GetChange",
+    ]
+    resources = [
+      "arn:aws:route53:::hostedzone/Z09995842VAJQYF2C7UVK",
+      "arn:aws:route53:::change/*",
+    ]
+  }
+
   # ReadOnly — Describe*/List* actions with no resource-level IAM support
   statement {
     effect = "Allow"
