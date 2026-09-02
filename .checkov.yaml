@@ -115,11 +115,5 @@ skip-check:
   # regenerated with the resource anyway (RDS/ElastiCache toggle). A
   # production deployment would add this.
   - CKV2_AWS_57
-  # ALB has no HTTPS listener yet -- HTTP-only until the Route53+ACM
-  # module ships (see 00-shared-context.md's Domain & DNS facts). Can't
-  # redirect to HTTPS when there's no HTTPS listener to redirect to yet.
-  # Remove this skip once that module adds the ACM listener + redirect
-  # action -- this check should then genuinely pass.
-  - CKV2_AWS_20
 compact: true
 quiet: true

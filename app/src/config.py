@@ -40,7 +40,7 @@ class Config:
     # Defaults to false: the ALB only has an HTTP listener right now (no
     # ACM/Route53 yet), and a Secure cookie is silently dropped by clients
     # over plain HTTP. Flip to true (or set the env var) once HTTPS is live.
-    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true"
+    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "true").lower() == "true"
 
     MAX_FAILED_LOGIN_ATTEMPTS = int(os.environ.get("MAX_FAILED_LOGIN_ATTEMPTS", "5"))
     LOCKOUT_DURATION_SECONDS = int(os.environ.get("LOCKOUT_DURATION_SECONDS", "300"))
