@@ -12,8 +12,9 @@ locals {
   artifact_bucket = module.compute.app_artifact_bucket_name
   log_group_name  = module.compute.app_log_group_name
 
-  artifact_policy = "${local.project}-${local.environment}-compute-app-artifact-read"
-  deploy_policy   = "${local.project}-${local.environment}-deploy-compute"
+  artifact_policy   = "${local.project}-${local.environment}-compute-app-artifact-read"
+  deploy_policy     = "${local.project}-${local.environment}-deploy-compute"
+  deploy_policy_ext = "${local.project}-${local.environment}-deploy-compute-ext"
 
   tag_layer = "compute"
 }
@@ -23,104 +24,22 @@ locals {
 # quota (a hard limit, not adjustable) once the S3 bucket's full set of read
 # permissions is included. Each statement is labeled by comment instead; the label
 # still shows up here and in `terraform plan` diffs, just not in the AWS console.
+#
+# BucketManage plus the ACM and Route53 permissions live in a SEPARATE managed
+# policy (deploy_compute_ext, below) rather than as statements here — adding ACM
+# and Route53 alone to this policy pushed its rendered JSON to 6,135/6,144 bytes
+# (a real CreatePolicyVersion 409 LimitExceeded on 2026-09-02, not a guess) —
+# technically under quota but with zero margin for the next addition. Moving
+# BucketManage out too gives both policies real headroom instead of a razor-thin
+# fit. AWS raised the managed-policies-per-role quota to 20 by default in a 2026
+# update, so a second policy attached to the same deploy role costs nothing.
 
 data "aws_iam_policy_document" "deploy_compute" {
 
-  # ACM — cert lifecycle for the HTTPS listener. RequestCertificate scoped
-  # the same as the rest; ACM cert ARNs get a random UUID at creation
-  # (unknowable in advance), so this can only scope to "any cert in this
-  # account/region," not the specific certificate -- same shape as the
-  # Secrets Manager name-pattern case. If RequestCertificate specifically
-  # 403s despite this, move just that action to Resource "*" (matching
-  # the CreateNatGateway/EIP precedent) -- would be case 16 of this
-  # project's "looks scopeable, isn't" pattern.
-<<<<<<< HEAD
-=======
-  statement {
-    effect = "Allow"
-    actions = [
-      "acm:RequestCertificate",
-      "acm:DescribeCertificate",
-      "acm:DeleteCertificate",
-      "acm:AddTagsToCertificate",
-      "acm:ListTagsForCertificate",
-    ]
-    resources = ["arn:aws:acm:${local.aws_region}:${local.account_id}:certificate/*"]
-  }
-
-  # Route53 — validation + alias records on the app subdomain's existing
-  # hosted zone (created manually outside Terraform when the domain was
-  # delegated -- see 00-shared-context.md's Domain & DNS facts). Hardcoded
-  # the same way the tfstate bucket name is below, not a variable -- a
-  # fixed, known-in-advance account resource. GetChange is separate
-  # because change IDs are global, not per-zone, and unknowable before
-  # ChangeResourceRecordSets actually runs. Combined into one statement
-  # (two resources) for size, same trade-off already accepted for
-  # RoleAttach below -- harmless, no such action/resource combination
-  # exists on the real API.
-  statement {
-    effect = "Allow"
-    actions = [
-      "route53:ChangeResourceRecordSets",
-      "route53:ListResourceRecordSets",
-      "route53:GetChange",
-    ]
-    resources = [
-      "arn:aws:route53:::hostedzone/Z09995842VAJQYF2C7UVK",
-      "arn:aws:route53:::change/*",
-    ]
-  }
-
   # ReadOnly — Describe*/List* actions with no resource-level IAM support
->>>>>>> origin/main
   statement {
     effect = "Allow"
     actions = [
-      "acm:RequestCertificate",
-      "acm:DescribeCertificate",
-      "acm:DeleteCertificate",
-      "acm:AddTagsToCertificate",
-      "acm:ListTagsForCertificate",
-    ]
-    resources = ["arn:aws:acm:${local.aws_region}:${local.account_id}:certificate/*"]
-  }
-
-  # Route53 — validation + alias records on the app subdomain's existing
-  # hosted zone (created manually outside Terraform when the domain was
-  # delegated -- see 00-shared-context.md's Domain & DNS facts). Hardcoded
-  # the same way the tfstate bucket name is below, not a variable -- a
-  # fixed, known-in-advance account resource. GetChange is separate
-  # because change IDs are global, not per-zone, and unknowable before
-  # ChangeResourceRecordSets actually runs. Combined into one statement
-  # (two resources) for size, same trade-off already accepted for
-  # RoleAttach below -- harmless, no such action/resource combination
-  # exists on the real API.
-  statement {
-    effect = "Allow"
-    actions = [
-      "route53:GetHostedZone",
-      "route53:ChangeResourceRecordSets",
-      "route53:ListResourceRecordSets",
-      "route53:GetChange",
-    ]
-    resources = [
-      "arn:aws:route53:::hostedzone/Z09995842VAJQYF2C7UVK",
-      "arn:aws:route53:::change/*",
-    ]
-  }
-
-  # ReadOnly — Describe*/List* actions with no resource-level IAM support.
-  # route53:ListHostedZones added 2026-09-02: data "aws_route53_zone" with
-  # zone_id set still calls ListHostedZones internally (pages all zones
-  # and filters client-side) rather than a scoped GetHostedZone lookup --
-  # confirmed via a real 403 under the deploy role. ListHostedZones has no
-  # resource-level IAM support at all (account-wide operation), so
-  # Resource "*" is the only option. Sixteenth confirmed case of this
-  # project's "looks scopeable, isn't" IAM pattern.
-  statement {
-    effect = "Allow"
-    actions = [
-      "route53:ListHostedZones",
       "ec2:DescribeLaunchTemplates",
       "ec2:DescribeLaunchTemplateVersions",
       "autoscaling:DescribeAutoScalingGroups",
@@ -261,45 +180,18 @@ data "aws_iam_policy_document" "deploy_compute" {
     resources = ["*"]
   }
 
-  # BucketManage — full set confirmed needed by aws_s3_bucket's own refresh:
-  # every one of these corresponds to a specific sub-config the AWS provider
-  # reads on every plan (versioning, encryption, PAB, lifecycle, tagging, ACL,
-  # location, policy, CORS, logging, object lock, replication, request payer,
-  # accelerate, website) — trimmed down once already and had to add several back.
+  # ObjectAccess — app.zip placeholder object (deploy.sh manages content out-of-band).
+  # PutObjectTagging added 2026-09-02: the object started picking up tags_all
+  # (Environment/Layer/ManagedBy/Project) and the first tag-write 403'd -- this
+  # object had never been tagged before, so the gap was invisible until now.
   statement {
     effect = "Allow"
     actions = [
-      "s3:CreateBucket",
-      "s3:DeleteBucket",
-      "s3:ListBucket",
-      "s3:GetBucketPolicy",
-      "s3:PutBucketVersioning",
-      "s3:GetBucketVersioning",
-      "s3:PutEncryptionConfiguration",
-      "s3:GetEncryptionConfiguration",
-      "s3:PutBucketPublicAccessBlock",
-      "s3:GetBucketPublicAccessBlock",
-      "s3:PutLifecycleConfiguration",
-      "s3:GetLifecycleConfiguration",
-      "s3:PutBucketTagging",
-      "s3:GetBucketTagging",
-      "s3:GetBucketLocation",
-      "s3:GetBucketAcl",
-      "s3:GetBucketCORS",
-      "s3:GetBucketLogging",
-      "s3:GetBucketObjectLockConfiguration",
-      "s3:GetReplicationConfiguration",
-      "s3:GetBucketRequestPayment",
-      "s3:GetAccelerateConfiguration",
-      "s3:GetBucketWebsite",
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:GetObjectTagging",
+      "s3:PutObjectTagging",
     ]
-    resources = ["arn:aws:s3:::${local.artifact_bucket}"]
-  }
-
-  # ObjectAccess — app.zip placeholder object (deploy.sh manages content out-of-band)
-  statement {
-    effect    = "Allow"
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:GetObjectTagging"]
     resources = ["arn:aws:s3:::${local.artifact_bucket}/app.zip"]
   }
 
@@ -320,7 +212,8 @@ data "aws_iam_policy_document" "deploy_compute" {
     ]
   }
 
-  # PolicySelfManage — this policy's own versions + compute's app-artifact-read policy
+  # PolicySelfManage — this policy's own versions + the deploy-compute-ext
+  # policy + compute's app-artifact-read policy
   statement {
     effect = "Allow"
     actions = [
@@ -335,15 +228,16 @@ data "aws_iam_policy_document" "deploy_compute" {
     resources = [
       "arn:aws:iam::${local.account_id}:policy/${local.artifact_policy}",
       "arn:aws:iam::${local.account_id}:policy/${local.deploy_policy}",
+      "arn:aws:iam::${local.account_id}:policy/${local.deploy_policy_ext}",
     ]
   }
 
-  # RoleAttach — attach/detach compute's own scoped policies (the
-  # deploy-compute policy and the artifact-read policy) to their two
-  # target roles (the CI deploy role and Foundation's app-role). Merged
-  # from two separate statements to stay under IAM's 6,144-char managed
-  # policy quota — see SECURITY.md for the trade-off this accepts (either
-  # policy can attach to either role, not strictly the original pairing).
+  # RoleAttach — attach/detach compute's own scoped policies (deploy-compute,
+  # deploy-compute-ext, and the artifact-read policy) to their two target
+  # roles (the CI deploy role and Foundation's app-role). Merged from
+  # separate statements to stay under IAM's 6,144-char managed policy quota
+  # — see SECURITY.md for the trade-off this accepts (any of these policies
+  # can attach to either role, not strictly the original pairing).
   statement {
     effect = "Allow"
     actions = [
@@ -360,6 +254,7 @@ data "aws_iam_policy_document" "deploy_compute" {
       variable = "iam:PolicyARN"
       values = [
         "arn:aws:iam::${local.account_id}:policy/${local.deploy_policy}",
+        "arn:aws:iam::${local.account_id}:policy/${local.deploy_policy_ext}",
         "arn:aws:iam::${local.account_id}:policy/${local.artifact_policy}",
       ]
     }
@@ -424,4 +319,102 @@ resource "aws_iam_policy" "deploy_compute" {
 resource "aws_iam_role_policy_attachment" "deploy_compute" {
   role       = data.aws_iam_role.deploy.name
   policy_arn = aws_iam_policy.deploy_compute.arn
+}
+
+# Overflow policy — S3 bucket-management, ACM, and Route53 permissions, split
+# out of deploy_compute above solely to stay well clear of IAM's 6,144-char
+# managed-policy size quota (adding ACM+Route53 alone left deploy_compute at
+# 6,135/6,144 bytes -- technically legal but zero margin for the next
+# addition). See the comment above data.aws_iam_policy_document.deploy_compute.
+data "aws_iam_policy_document" "deploy_compute_ext" {
+
+  # BucketManage — full set confirmed needed by aws_s3_bucket's own refresh:
+  # every one of these corresponds to a specific sub-config the AWS provider
+  # reads on every plan (versioning, encryption, PAB, lifecycle, tagging, ACL,
+  # location, policy, CORS, logging, object lock, replication, request payer,
+  # accelerate, website) — trimmed down once already and had to add several back.
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:ListBucket",
+      "s3:GetBucketPolicy",
+      "s3:PutBucketVersioning",
+      "s3:GetBucketVersioning",
+      "s3:PutEncryptionConfiguration",
+      "s3:GetEncryptionConfiguration",
+      "s3:PutBucketPublicAccessBlock",
+      "s3:GetBucketPublicAccessBlock",
+      "s3:PutLifecycleConfiguration",
+      "s3:GetLifecycleConfiguration",
+      "s3:PutBucketTagging",
+      "s3:GetBucketTagging",
+      "s3:GetBucketLocation",
+      "s3:GetBucketAcl",
+      "s3:GetBucketCORS",
+      "s3:GetBucketLogging",
+      "s3:GetBucketObjectLockConfiguration",
+      "s3:GetReplicationConfiguration",
+      "s3:GetBucketRequestPayment",
+      "s3:GetAccelerateConfiguration",
+      "s3:GetBucketWebsite",
+    ]
+    resources = ["arn:aws:s3:::${local.artifact_bucket}"]
+  }
+
+  # ACM — cert lifecycle for the HTTPS listener. RequestCertificate scoped
+  # the same as the rest; ACM cert ARNs get a random UUID at creation
+  # (unknowable in advance), so this can only scope to "any cert in this
+  # account/region," not the specific certificate -- same shape as the
+  # Secrets Manager name-pattern case.
+  statement {
+    effect = "Allow"
+    actions = [
+      "acm:RequestCertificate",
+      "acm:DescribeCertificate",
+      "acm:DeleteCertificate",
+      "acm:AddTagsToCertificate",
+      "acm:ListTagsForCertificate",
+    ]
+    resources = ["arn:aws:acm:${local.aws_region}:${local.account_id}:certificate/*"]
+  }
+
+  # Route53 — validation + alias records on the app subdomain's existing
+  # hosted zone (created manually outside Terraform when the domain was
+  # delegated -- see 00-shared-context.md's Domain & DNS facts). Hardcoded
+  # the same way the tfstate bucket name is below, not a variable -- a
+  # fixed, known-in-advance account resource. GetHostedZone added back
+  # 2026-09-02: aws_route53_record's own create path looks up the zone
+  # internally even with zone_id already known and no data source in play --
+  # confirmed via a real 403 on aws_route53_record.app_alb_alias, not on any
+  # data source. Unlike route53:ListHostedZones (account-wide, no
+  # resource-level support), GetHostedZone scopes cleanly to the one zone
+  # ARN, so this isn't a repeat of that case. GetChange is separate from the
+  # rest because change IDs are global, not per-zone, and unknowable before
+  # ChangeResourceRecordSets actually runs.
+  statement {
+    effect = "Allow"
+    actions = [
+      "route53:GetHostedZone",
+      "route53:ChangeResourceRecordSets",
+      "route53:ListResourceRecordSets",
+      "route53:GetChange",
+    ]
+    resources = [
+      "arn:aws:route53:::hostedzone/Z09995842VAJQYF2C7UVK",
+      "arn:aws:route53:::change/*",
+    ]
+  }
+}
+
+resource "aws_iam_policy" "deploy_compute_ext" {
+  name        = local.deploy_policy_ext
+  description = "Scoped CI deploy-role permissions for compute's S3 bucket management, ACM certificate, and Route53 records (HTTPS listener)."
+  policy      = data.aws_iam_policy_document.deploy_compute_ext.json
+}
+
+resource "aws_iam_role_policy_attachment" "deploy_compute_ext" {
+  role       = data.aws_iam_role.deploy.name
+  policy_arn = aws_iam_policy.deploy_compute_ext.arn
 }
