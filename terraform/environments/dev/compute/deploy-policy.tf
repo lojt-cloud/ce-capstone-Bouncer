@@ -69,7 +69,7 @@ data "aws_iam_policy_document" "deploy_compute" {
     ]
   }
 
-# ReadOnly — Describe*/List* actions with no resource-level IAM support
+  # ReadOnly — Describe*/List* actions with no resource-level IAM support
   statement {
     effect = "Allow"
     actions = [
