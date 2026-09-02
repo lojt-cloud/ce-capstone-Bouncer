@@ -5,7 +5,9 @@ data "aws_iam_role" "deploy" {
 
 locals {
   account_id    = data.aws_caller_identity.current.account_id
+  aws_region    = "eu-central-1"
   deploy_policy = "${local.project}-${local.environment}-deploy-observability"
+  alerts_topic  = "${local.project}-${local.environment}-observability-alerts"
 }
 
 data "aws_iam_policy_document" "deploy_observability" {
@@ -32,6 +34,91 @@ data "aws_iam_policy_document" "deploy_observability" {
     sid       = "DashboardListReadOnly"
     effect    = "Allow"
     actions   = ["cloudwatch:ListDashboards"]
+    resources = ["*"]
+  }
+
+  # AlarmManage — PutMetricAlarm/DeleteAlarms both require (and support)
+  # the "alarm" resource type per AWS's reference. Scoped to the 3 known
+  # alarm names.
+  statement {
+    sid    = "AlarmManage"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:PutMetricAlarm",
+      "cloudwatch:DeleteAlarms",
+    ]
+    resources = [
+      "arn:aws:cloudwatch:${local.aws_region}:${local.account_id}:alarm:${local.project}-${local.environment}-high-5xx-rate",
+      "arn:aws:cloudwatch:${local.aws_region}:${local.account_id}:alarm:${local.project}-${local.environment}-unhealthy-hosts",
+      "arn:aws:cloudwatch:${local.aws_region}:${local.account_id}:alarm:${local.project}-${local.environment}-rds-high-cpu",
+    ]
+  }
+  # AlarmReadOnly — DescribeAlarms has no resource-level scoping support,
+  # same shape as DashboardListReadOnly above.
+  statement {
+    sid       = "AlarmReadOnly"
+    effect    = "Allow"
+    actions   = ["cloudwatch:DescribeAlarms"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "KmsKeyManage"
+    effect = "Allow"
+    actions = [
+      "kms:CreateKey",
+      "kms:DescribeKey",
+      "kms:GetKeyPolicy",
+      "kms:EnableKeyRotation",
+      "kms:GetKeyRotationStatus",
+      "kms:ScheduleKeyDeletion",
+      "kms:CreateAlias",
+      "kms:DeleteAlias",
+      "kms:UpdateAlias",
+      "kms:ListAliases",
+      "kms:TagResource",
+      "kms:UntagResource",
+      "kms:ListResourceTags",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "KmsKeyPolicyManage"
+    effect    = "Allow"
+    actions   = ["kms:PutKeyPolicy"]
+    resources = [module.observability.sns_alerts_kms_key_arn]
+  }
+
+  # SnsTopicManage — same shape as foundation's drift-alerts precedent
+  statement {
+    sid    = "SnsTopicManage"
+    effect = "Allow"
+    actions = [
+      "sns:CreateTopic",
+      "sns:DeleteTopic",
+      "sns:GetTopicAttributes",
+      "sns:SetTopicAttributes",
+      "sns:TagResource",
+      "sns:UntagResource",
+      "sns:ListTagsForResource",
+      "sns:Publish",
+      "sns:Subscribe",
+    ]
+    resources = ["arn:aws:sns:${local.aws_region}:${local.account_id}:${local.alerts_topic}"]
+  }
+
+  # SnsSubscriptionActions — SNS has no "subscription" IAM resource type at
+  # all, confirmed via the same drift-alerts precedent; these three require
+  # Resource: "*" unconditionally.
+  statement {
+    sid    = "SnsSubscriptionActions"
+    effect = "Allow"
+    actions = [
+      "sns:Unsubscribe",
+      "sns:GetSubscriptionAttributes",
+      "sns:SetSubscriptionAttributes",
+    ]
     resources = ["*"]
   }
 
@@ -103,6 +190,7 @@ data "aws_iam_policy_document" "deploy_observability" {
   }
 }
 
+
 resource "aws_iam_policy" "deploy_observability" {
   name        = local.deploy_policy
   description = "Scoped CI deploy-role permissions for the observability layer (terraform/environments/dev/observability)."
@@ -112,4 +200,5 @@ resource "aws_iam_policy" "deploy_observability" {
 resource "aws_iam_role_policy_attachment" "deploy_observability" {
   role       = data.aws_iam_role.deploy.name
   policy_arn = aws_iam_policy.deploy_observability.arn
+
 }
