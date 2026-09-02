@@ -34,24 +34,54 @@ echo "=== 3/3: foundation (NAT Gateway) ==="
 set_off foundation
 if ! (cd "$TF_ROOT/foundation" && terraform apply -auto-approve); then
   echo
-  echo "foundation apply failed -- checking for the known stale-EIP release bug"
-  echo "(AWS's ReleaseAddress API sometimes errors on a stale ENI reference"
-  echo "right after the NAT Gateway that used it is destroyed)."
+  echo "foundation apply failed -- checking for the known stale-EIP release race"
+  echo "(AWS's ReleaseAddress API can 400 on the NAT Gateway's just-deleted ENI"
+  echo "for a short window right after the gateway itself finishes destroying --"
+  echo "confirmed 2026-09-01: even a direct CLI release hits the identical error"
+  echo "immediately after; it's a real AWS-side lag, not a Terraform-vs-CLI issue,"
+  echo "and it clears on its own within well under a minute.)"
   EIP_ALLOC_ID=$(
     cd "$TF_ROOT/foundation" && \
     terraform state show 'module.networking.aws_eip.nat[0]' 2>/dev/null \
       | sed -n 's/^[[:space:]]*id[[:space:]]*=[[:space:]]*"\(eipalloc-[a-z0-9]*\)".*/\1/p' \
       | head -1
   )
-  if [ -n "$EIP_ALLOC_ID" ]; then
-    echo "Found $EIP_ALLOC_ID still in state -- releasing directly and retrying apply"
-    aws ec2 release-address --allocation-id "$EIP_ALLOC_ID" --region "$REGION" || true
-    (cd "$TF_ROOT/foundation" && terraform apply -auto-approve)
-  else
+  if [ -z "$EIP_ALLOC_ID" ]; then
     echo "Could not find a dangling EIP in state to auto-recover -- check manually:"
     echo "  cd $TF_ROOT/foundation && terraform state list | grep eip"
     exit 1
   fi
+
+  echo "Found $EIP_ALLOC_ID still in state -- retrying release with backoff"
+  RELEASED=false
+  for attempt in 1 2 3 4 5; do
+    ERR_LOG=$(mktemp)
+    if aws ec2 release-address --allocation-id "$EIP_ALLOC_ID" --region "$REGION" 2>"$ERR_LOG"; then
+      RELEASED=true
+      rm -f "$ERR_LOG"
+      break
+    fi
+    if grep -q "InvalidAllocationID.NotFound" "$ERR_LOG"; then
+      # Already released -- an earlier attempt succeeded server-side even
+      # though its own CLI call reported an error. Treat as success.
+      RELEASED=true
+      rm -f "$ERR_LOG"
+      break
+    fi
+    rm -f "$ERR_LOG"
+    echo "  attempt $attempt/5 failed, waiting 15s for AWS's EIP association record to catch up..."
+    sleep 15
+  done
+
+  if [ "$RELEASED" != "true" ]; then
+    echo "EIP release still failing after 5 attempts (~75s) -- something other than"
+    echo "the known propagation lag. Check manually:"
+    echo "  aws ec2 describe-addresses --allocation-ids $EIP_ALLOC_ID --region $REGION"
+    exit 1
+  fi
+
+  echo "EIP released -- finishing the foundation apply"
+  (cd "$TF_ROOT/foundation" && terraform apply -auto-approve)
 fi
 
 echo
