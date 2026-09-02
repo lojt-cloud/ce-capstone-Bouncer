@@ -145,14 +145,7 @@ data "aws_iam_policy_document" "deploy_compute" {
     }
   }
 
-  # ELBv2Manage — manage existing (ResourceTag). SetWebACL added 2026-09-02:
-  # aws_wafv2_web_acl_association's create path calls the ELBv2 API's own
-  # SetWebACL action to actually attach the ACL to the ALB, not just
-  # wafv2:AssociateWebACL -- confirmed via a real 403 naming the ALB ARN
-  # directly, so it scopes the same as every other action in this
-  # statement. Case 17 of this project's "looks scopeable, isn't" pattern
-  # (a hidden dependency on a different service's action, same shape as
-  # ec2:RunInstances/CreateTags and route53:GetHostedZone).
+  # ELBv2Manage — manage existing (ResourceTag)
   statement {
     effect = "Allow"
     actions = [
@@ -164,7 +157,6 @@ data "aws_iam_policy_document" "deploy_compute" {
       "elasticloadbalancing:RemoveTags",
       "elasticloadbalancing:RegisterTargets",
       "elasticloadbalancing:DeregisterTargets",
-      "elasticloadbalancing:SetWebACL",
     ]
     resources = [
       "arn:aws:elasticloadbalancing:${local.aws_region}:${local.account_id}:loadbalancer/app/${local.alb_name}/*",
@@ -176,6 +168,26 @@ data "aws_iam_policy_document" "deploy_compute" {
       variable = "aws:ResourceTag/Layer"
       values   = [local.tag_layer]
     }
+  }
+
+  # ELBv2SetWebACL — split out of ELBv2Manage above, 2026-09-02. Two failed
+  # applies confirmed elasticloadbalancing:SetWebACL genuinely does not
+  # honor the aws:ResourceTag condition (identical 403 immediately after a
+  # confirmed-applied policy update, ruling out propagation lag) --
+  # corroborated by AWS's own production aws-load-balancer-controller IAM
+  # policy (github.com/kubernetes-sigs/aws-load-balancer-controller),
+  # which grants this exact action with NO condition at all, unlike its
+  # sibling actions in the same policy. Scoped to this ALB's ARN, not "*"
+  # -- the earlier 403 named that specific ARN, confirming ARN-level
+  # scoping does work here, just not the tag condition. Case 17 of this
+  # project's "looks scopeable, isn't" pattern (a hidden dependency on a
+  # different service's action, same shape as ec2:RunInstances/CreateTags
+  # and route53:GetHostedZone) -- with the added nuance that the action
+  # supports resource ARNs but not this particular condition key.
+  statement {
+    effect    = "Allow"
+    actions   = ["elasticloadbalancing:SetWebACL"]
+    resources = ["arn:aws:elasticloadbalancing:${local.aws_region}:${local.account_id}:loadbalancer/app/${local.alb_name}/*"]
   }
 
   # ELBv2NoScope — attribute-modify actions with unclear resource-level support
