@@ -54,10 +54,6 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-data "aws_route53_zone" "app" {
-  zone_id = var.route53_zone_id
-}
-
 resource "aws_acm_certificate" "app" {
   count = var.enable_billable_resources ? 1 : 0
 
@@ -78,7 +74,7 @@ resource "aws_route53_record" "app_cert_validation" {
     }
   } : {}
 
-  zone_id = data.aws_route53_zone.app.zone_id
+  zone_id = var.route53_zone_id
   name    = each.value.name
   type    = each.value.type
   records = [each.value.record]
@@ -110,7 +106,7 @@ resource "aws_lb_listener" "https" {
 resource "aws_route53_record" "app_alb_alias" {
   count = var.enable_billable_resources ? 1 : 0
 
-  zone_id = data.aws_route53_zone.app.zone_id
+  zone_id = var.route53_zone_id
   name    = var.domain_name
   type    = "A"
 
