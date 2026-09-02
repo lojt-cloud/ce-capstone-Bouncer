@@ -21,3 +21,7 @@ output "alb_arn" {
 output "alb_zone_id" {
   value = module.compute.alb_zone_id
 }
+
+output "target_group_arn" {
+  value = module.compute.target_group_arn
+}
