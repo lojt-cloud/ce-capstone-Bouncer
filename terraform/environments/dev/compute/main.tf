@@ -1,6 +1,6 @@
 locals {
-  project     = "ce-capstone-bouncer"
-  environment = "dev"
+  project     = var.project_name
+  environment = var.environment
   aws_region  = "eu-central-1"
 }
 

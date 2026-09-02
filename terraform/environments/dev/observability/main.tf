@@ -1,6 +1,6 @@
 locals {
-  project     = "ce-capstone-bouncer"
-  environment = "dev"
+  project     = var.project_name
+  environment = var.environment
 
   alb_arn          = data.terraform_remote_state.compute.outputs.alb_arn
   target_group_arn = data.terraform_remote_state.compute.outputs.target_group_arn
