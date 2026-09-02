@@ -66,3 +66,15 @@ variable "enable_billable_resources" {
   type        = bool
   default     = true
 }
+
+variable "domain_name" {
+  description = "Public hostname the ALB is served under (Route53 alias + ACM cert target)."
+  type        = string
+  default     = "app.projectbouncer.org"
+}
+
+variable "route53_zone_id" {
+  description = "Existing Route53 hosted zone ID for the app subdomain (created manually outside Terraform when the domain was delegated from Cloudflare)."
+  type        = string
+  default     = "Z09995842VAJQYF2C7UVK"
+}
