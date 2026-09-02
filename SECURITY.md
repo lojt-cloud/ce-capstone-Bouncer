@@ -225,3 +225,40 @@ security group alone already restricts access to the app tier. `cache-sg`
 allows inbound only from `app-sg` on 6379, same pattern as `db-sg`.
 Read/write/delete proven from a live app instance via `valkey-cli` over
 TLS with AUTH.
+
+## WAF: Log4j Protection and Rate Limiting
+
+An AWS WAFv2 web ACL sits in front of the ALB (`terraform/modules/compute/waf.tf`),
+gated behind `enable_billable_resources` like the rest of the compute layer
+(~$8/mo when running: $5/mo web ACL + $1/mo x 3 rules/rule groups, see
+COSTS.md).
+
+- **Log4j / JNDI protection**: the AWS-managed `AWSManagedRulesKnownBadInputsRuleSet`
+  rule group blocks Log4Shell-style payloads (CVE-2021-44228) before they
+  reach the app.
+- **Rate limiting**: two rate-based rules, one scoped to `/login` and one to
+  `/buy`, block a source IP for the remainder of AWS's evaluation window once
+  it exceeds 10 requests in 5 minutes against that path. Verified live: a
+  15-request burst against `/buy` returned `401` (unauthenticated, app-level)
+  for the first requests, then `403` (WAF block, request never reaches the
+  ALB target) once the limit was crossed. Note AWS WAF's own documented
+  caveat — rate-based rules can take up to several minutes to start
+  enforcing after creation or a rule change, since detection isn't
+  per-request but based on a periodically-reassessed rolling window.
+- **Logging**: WAF request logs go to a dedicated CloudWatch log group
+  (`aws-waf-logs-<project>-<environment>`), with the `cookie` and
+  `authorization` headers redacted.
+
+**Defense in depth on `/buy`**: the rate-based WAF rule and the database's
+unique constraint on (user, ticket) are independent layers protecting the
+same endpoint. The WAF rule stops high-volume abuse from a single IP before
+it reaches the app (429/blocked); the DB constraint stops a duplicate
+purchase from succeeding even for traffic that stays under the WAF's
+threshold (409). Neither depends on the other holding.
+
+AWS Config was dropped from this project's scope to manage build time — see
+[ADR 0012](docs/decisions/0012-drop-aws-config-from-scope.md). Checkov's
+static IaC scanning (already run on every PR, see `04-cicd.md`) is the
+compensating control for configuration drift and policy compliance in its
+place; it doesn't cover runtime/drift detection the way Config would, which
+is the accepted trade-off.
