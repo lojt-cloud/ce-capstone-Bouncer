@@ -20,10 +20,11 @@ provider "aws" {
   region = "eu-central-1"
   default_tags {
     tags = {
-      Project     = "ce-capstone-bouncer"
-      Environment = "dev"
+      Project     = local.project
+      Environment = local.environment
       Layer       = "compute"
       ManagedBy   = "terraform"
+      Owner       = var.owner
     }
   }
 }

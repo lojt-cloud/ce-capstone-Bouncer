@@ -31,3 +31,9 @@ variable "tfstate_bucket" {
   type        = string
   default     = "ce-capstone-bouncer-tfstate-f7fc4b65"
 }
+
+variable "owner" {
+  description = "Tag identifying who owns/maintains this project"
+  type        = string
+  default     = "lojt-cloud"
+}

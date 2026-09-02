@@ -7,6 +7,7 @@ provider "aws" {
       Environment = var.environment
       Layer       = "foundation"
       ManagedBy   = "terraform"
+      Owner       = var.owner
     }
   }
 }
