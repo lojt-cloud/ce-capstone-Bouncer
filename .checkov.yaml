@@ -67,10 +67,6 @@ skip-check:
   # edge-to-instance TLS needs per-instance certs, out of scope at this
   # scale without a service mesh.
   - CKV_AWS_378
-  # WAF is a planned resource for this project (00-shared-context.md's
-  # on/off toggle list includes it) but isn't built yet — not this
-  # module's scope. Will attach to this ALB when it lands.
-  - CKV2_AWS_28
     # Single-AZ RDS and single-node ElastiCache (no automatic failover) are
   # locked decisions -- see 00-shared-context.md and COSTS.md's Data Tier
   # section. Multi-AZ/failover documented as the production recommendation.
@@ -115,5 +111,19 @@ skip-check:
   # regenerated with the resource anyway (RDS/ElastiCache toggle). A
   # production deployment would add this.
   - CKV2_AWS_57
+  # checkov graph-check limitation, not a real gap: CKV2_AWS_31 checks for
+  # a connection edge between aws_wafv2_web_acl and
+  # aws_wafv2_web_acl_logging_configuration in checkov's dependency graph.
+  # Both resources here are conditioned on the same
+  # enable_billable_resources count, and checkov's graph-connection
+  # detection has a documented history of false negatives on exactly this
+  # shape (count = var.x ? 1 : 0 on both sides of the connection) -- see
+  # bridgecrewio/checkov#1230. The Terraform itself is correct:
+  # aws_wafv2_web_acl_logging_configuration.app.resource_arn references
+  # aws_wafv2_web_acl.app[0].arn directly (terraform/modules/compute/waf.tf).
+  # Verified for real after apply via
+  # `aws wafv2 get-logging-configuration --resource-arn <web-acl-arn>`,
+  # not just skipped and trusted -- see 00-shared-context.md.
+  - CKV2_AWS_31
 compact: true
 quiet: true
