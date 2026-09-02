@@ -28,3 +28,7 @@ variable "cache_cluster_id" {
   type    = string
   default = null
 }
+variable "alert_email" {
+  type    = string
+  default = "lojtiboy@gmail.com"
+}

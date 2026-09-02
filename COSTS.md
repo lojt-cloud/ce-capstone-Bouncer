@@ -47,3 +47,9 @@ RDS instance (~$0.016-0.02/hr, ~€12-15/mo). Gated behind the same
 this whole layer. Losing this node on toggle-off has zero consequence: it
 holds only login-lockout counters and session tokens, both ephemeral by
 design, no data of record to protect.
+
+## SNS
+- SNS alerts CMK (aws_kms_key.sns_alerts): $1/month flat. Required because
+  CloudWatch Alarms can't publish to an SNS topic encrypted with the
+  AWS-managed alias/aws/sns key — that key's policy isn't editable, so a
+  customer-managed key was the only way to keep the topic encrypted.

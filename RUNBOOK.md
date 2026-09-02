@@ -238,3 +238,24 @@ supplemental IAM policy on the deploy role scoped to just this topic. Not
 gated by the billable-resources toggle — negligible cost, stays alive
 through a full teardown so the nightly check can still confirm "nothing
 drifted" even when the environment is intentionally off.
+
+## Alarm fires but no email arrives
+
+Check alarm action history, not just alarm state:
+
+  aws cloudwatch describe-alarm-history --alarm-name <name> \
+    --history-item-type Action --max-records 3 --output text
+
+If `error` shows "CloudWatch Alarms does not have authorization to access
+the SNS topic encryption key", the SNS topic's KMS key policy doesn't
+grant cloudwatch.amazonaws.com kms:Decrypt / kms:GenerateDataKey*. This
+happens if the topic ever gets pointed back at alias/aws/sns (the
+AWS-managed key) instead of aws_kms_key.sns_alerts — that key's policy
+can't be edited, so alarms silently fail to publish. Fix is to point
+kms_master_key_id back at the CMK, never the managed alias.
+
+To manually verify any alarm's SNS wiring without waiting for a real
+breach:
+
+  aws cloudwatch set-alarm-state --alarm-name <name> \
+    --state-value ALARM --state-reason "manual test"
