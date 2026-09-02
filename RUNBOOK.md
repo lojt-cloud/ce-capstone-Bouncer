@@ -16,6 +16,24 @@ triggered an ASG instance refresh, confirmed the app recreated the
 table with the same schema on the fresh instance, reseeded a test
 user, and confirmed login worked end to end via the ALB.
 
+Bring-up ordering avoids the ASG instance refresh (2026-09-02). Bring
+layers up foundation → data-tier → compute, not foundation → compute →
+data-tier. Since `terraform apply` blocks on each resource's own
+create-timeout waiter, sequencing data-tier before compute means the
+ASG's instances never boot until RDS/ElastiCache already exist -- the DB
+pool opens and schema self-heal runs on first boot. Confirmed live
+2026-09-02: tier-status page showed `Database: CONNECTED` immediately
+after compute's apply, with no instance refresh needed (unlike the
+2026-09-01 rebuild, which used the old order and required one). Use this
+order for every future full bring-up.
+
+Recreating the RDS instance or ElastiCache replication group (toggle,
+replacement, or manual recreate) always forces a replacement of its
+Secrets Manager secret version too -- the secret's JSON payload embeds
+the live endpoint address, which is unknown until the new resource
+exists. This is expected, not a bug; the secret container itself never
+gets destroyed.
+
 ## Reseeding test users after RDS recreate
 
 **Automated:** `scripts/reseed-test-user.sh <username> <password>` does
@@ -59,7 +77,7 @@ Everything below runs inside that session.
 
 ### 3. Install psql (fresh instance, not baked into the AMI)
 
-    which psql || sudo dnf install -y postgresql15
+    which psql || sudo dnf install -y postgresql16
 
 ### 4. Pull DB credentials fresh from Secrets Manager
 
@@ -126,17 +144,17 @@ with RDS untouched leaves existing rows intact -- no reseed needed.
 
 ## NAT Gateway EIP release failure on toggle-off
 
-`terraform apply -var="enable_billable_resources=false"` in the
-foundation layer can fail releasing the NAT Gateway's EIP with
-`InvalidNetworkInterfaceID.NotFound`, referencing an ENI that no longer
-exists -- a stale reference in AWS's EIP-release path, not a real
-association (confirmed via `aws ec2 describe-addresses`, which showed
-no `AssociationId`/`NetworkInterfaceId`). Retrying `terraform apply`
-does not resolve it. Fix: release the EIP directly, then re-apply to
-reconcile state:
-
-    aws ec2 release-address --allocation-id <id> --region eu-central-1
-    terraform apply -var="enable_billable_resources=false"
+Foundation's apply can fail releasing the NAT Gateway's EIP with
+`InvalidNetworkInterfaceID.NotFound`. Root cause (confirmed 2026-09-01):
+a short-lived AWS-side race -- `ReleaseAddress` 400s on the NAT
+Gateway's just-deleted ENI for well under a minute right after the
+gateway finishes destroying, then clears on its own. Not a state issue;
+**no manual EIP release or `terraform state rm` needed** -- just retry.
+`teardown.sh`'s own EIP-release fallback (PR #62) now retries
+automatically up to 5 times with a 15s backoff, so this shouldn't need
+manual intervention when using that script. If hit outside
+`teardown.sh`, wait ~1 minute and re-apply using the committed
+`dev.auto.tfvars` (not a `-var` flag).
 
 ## CI/CD Pipeline
 
@@ -185,9 +203,20 @@ were in before their first real create. Expect the possibility of a
 missing write-path permission the first time this toggle actually flips
 true through CI, per the standing lesson in `00-shared-context.md`.
 `./teardown.sh` writes `false` into all three layers' files and applies
-foundation/compute/data-tier locally in dependency order — run it, then
-commit the resulting `dev.auto.tfvars` changes so CI doesn't try to undo
-them on the next merge.
+compute, then data-tier, then foundation locally — reverse-dependency
+order, most-dependent first — run it, then commit the resulting
+`dev.auto.tfvars` changes so CI doesn't try to undo them on the next
+merge.
+
+**Update, 2026-09-01 / 09-02:** the caveat above was real. Data-tier's
+first toggle-on hit three missing write-path permissions
+(`rds:CreateDBInstance` needing the subnet-group ARN;
+`elasticache:CreateReplicationGroup` needing both the parameter-group and
+subnet-group ARNs — see `00-shared-context.md`'s CI/CD auth facts, cases
+13–15), fixed across PRs #57–#58. All three layers have since been fully
+torn down and brought back up twice (2026-09-01, 2026-09-02) with zero
+new IAM gaps on the second cycle — the deploy role's full create/destroy
+lifecycle for all three layers is now proven, not just planned.
 
 **Drift detection** (`.github/workflows/drift-detection.yml`) — scheduled
 nightly at `0 3 * * *` UTC (roughly 4-5am Central Europe, depending on
@@ -209,5 +238,3 @@ supplemental IAM policy on the deploy role scoped to just this topic. Not
 gated by the billable-resources toggle — negligible cost, stays alive
 through a full teardown so the nightly check can still confirm "nothing
 drifted" even when the environment is intentionally off.
-
-Recreating the RDS instance or ElastiCache replication group (toggle, replacement, or manual recreate) always forces a replacement of its Secrets Manager secret version too — the secret's JSON payload embeds the live endpoint address, which is unknown until the new resource exists. This is expected, not a bug; the secret container itself never gets destroyed.
