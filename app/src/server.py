@@ -11,7 +11,7 @@ import psycopg
 import redis
 from flask import Flask, jsonify, make_response, render_template, request
 from psycopg_pool import ConnectionPool
-
+from psycopg.errors import UniqueViolation
 from config import Config
 
 app = Flask(__name__)
@@ -250,7 +250,62 @@ def me():
     _redis_client.expire(session_key, Config.SESSION_TTL_SECONDS)
     session_data = json.loads(raw)
     return jsonify({"authenticated": True, "username": session_data["username"]})
+def get_current_username():
+    """Same session lookup /me uses, factored out so /buy can require
+    auth without duplicating the Redis logic inline."""
+    sid = request.cookies.get("session_id")
+    if not sid or _redis_client is None:
+        return None
+    try:
+        raw = _redis_client.get(SESSION_KEY.format(sid))
+    except redis.RedisError:
+        return None
+    if not raw:
+        return None
+    return json.loads(raw)["username"]
 
+
+@app.route("/buy", methods=["POST"])
+
+def buy():
+    username = get_current_username()
+    if username is None:
+        return jsonify({"error": "authentication required"}), 401
+
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({"error": "database tier not configured"}), 503
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+            user_row = cur.fetchone()
+            if user_row is None:
+                return jsonify({"error": "user not found"}), 404
+            user_id = user_row[0]
+
+            cur.execute("SELECT id, name FROM events ORDER BY id LIMIT 1")
+            event_row = cur.fetchone()
+            if event_row is None:
+                return jsonify({"error": "no event configured"}), 503
+            event_id, event_name = event_row
+
+            try:
+                cur.execute(
+                    "INSERT INTO tickets (event_id, user_id) VALUES (%s, %s) RETURNING id",
+                    (event_id, user_id),
+                )
+                ticket_id = cur.fetchone()[0]
+                conn.commit()
+            except UniqueViolation:
+                conn.rollback()
+                return jsonify({"error": "already have a ticket for this event"}), 409
+    except psycopg.OperationalError:
+        return jsonify({"error": "database tier error"}), 503
+    finally:
+        release_db_connection(conn)
+
+    return jsonify({"status": "ok", "ticket_id": ticket_id, "event": event_name}), 201
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=Config.APP_PORT)
