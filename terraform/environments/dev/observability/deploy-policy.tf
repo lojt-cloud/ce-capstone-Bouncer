@@ -46,8 +46,8 @@ data "aws_iam_policy_document" "deploy_observability" {
   # TFStateReads — this layer's data.tf reads foundation, compute, and
   # data-tier's state
   statement {
-    sid    = "TFStateReads"
-    effect = "Allow"
+    sid     = "TFStateReads"
+    effect  = "Allow"
     actions = ["s3:GetObject"]
     resources = [
       "arn:aws:s3:::ce-capstone-bouncer-tfstate-f7fc4b65/dev/foundation/terraform.tfstate",

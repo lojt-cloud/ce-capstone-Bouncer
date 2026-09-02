@@ -20,8 +20,8 @@ module "observability" {
   region      = "eu-central-1"
 
   asg_name                = data.terraform_remote_state.compute.outputs.asg_name
-  alb_arn_suffix           = local.alb_arn_suffix
-  target_group_arn_suffix  = local.target_group_arn_suffix
-  db_instance_id           = data.terraform_remote_state.data_tier.outputs.db_instance_id
-  cache_cluster_id         = local.cache_cluster_id
+  alb_arn_suffix          = local.alb_arn_suffix
+  target_group_arn_suffix = local.target_group_arn_suffix
+  db_instance_id          = data.terraform_remote_state.data_tier.outputs.db_instance_id
+  cache_cluster_id        = local.cache_cluster_id
 }
