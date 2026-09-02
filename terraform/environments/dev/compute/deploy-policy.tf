@@ -7,10 +7,11 @@ data "aws_iam_role" "deploy" {
 locals {
   account_id = data.aws_caller_identity.current.account_id
 
-  asg_name        = "${local.project}-${local.environment}-app-asg"
-  alb_name        = "${local.project}-${local.environment}-alb"
-  artifact_bucket = module.compute.app_artifact_bucket_name
-  log_group_name  = module.compute.app_log_group_name
+  asg_name           = "${local.project}-${local.environment}-app-asg"
+  alb_name           = "${local.project}-${local.environment}-alb"
+  artifact_bucket    = module.compute.app_artifact_bucket_name
+  log_group_name     = module.compute.app_log_group_name
+  waf_log_group_name = "aws-waf-logs-${local.project}-${local.environment}"
 
   artifact_policy   = "${local.project}-${local.environment}-compute-app-artifact-read"
   deploy_policy     = "${local.project}-${local.environment}-deploy-compute"
@@ -195,7 +196,9 @@ data "aws_iam_policy_document" "deploy_compute" {
     resources = ["arn:aws:s3:::${local.artifact_bucket}/app.zip"]
   }
 
-  # LogGroupManage — logs:DescribeLogGroups already covered account-wide by Foundation's policy
+  # LogGroupManage — logs:DescribeLogGroups already covered account-wide by
+  # Foundation's policy. WAF's own log group added 2026-09-02 alongside the
+  # app's -- same actions, same statement, just a second resource pair.
   statement {
     effect = "Allow"
     actions = [
@@ -209,6 +212,8 @@ data "aws_iam_policy_document" "deploy_compute" {
     resources = [
       "arn:aws:logs:${local.aws_region}:${local.account_id}:log-group:${local.log_group_name}",
       "arn:aws:logs:${local.aws_region}:${local.account_id}:log-group:${local.log_group_name}:*",
+      "arn:aws:logs:${local.aws_region}:${local.account_id}:log-group:${local.waf_log_group_name}",
+      "arn:aws:logs:${local.aws_region}:${local.account_id}:log-group:${local.waf_log_group_name}:*",
     ]
   }
 
@@ -406,11 +411,59 @@ data "aws_iam_policy_document" "deploy_compute_ext" {
       "arn:aws:route53:::change/*",
     ]
   }
+
+  # WAFManage — web ACL + rate-based rule create/manage/associate for the
+  # /login and /buy protections. None of these wafv2 actions support
+  # resource-level ARN scoping -- confirmed via AWS's own IAM service-
+  # authorization reference for WAFV2 (every action below has no resource
+  # type listed there, meaning IAM requires Resource "*"). Same shape as
+  # ADR 0010's RunInstances precedent: unconditioned because AWS itself
+  # doesn't support scoping it, not a shortcut taken here.
+  statement {
+    effect = "Allow"
+    actions = [
+      "wafv2:CreateWebACL",
+      "wafv2:DeleteWebACL",
+      "wafv2:GetWebACL",
+      "wafv2:UpdateWebACL",
+      "wafv2:ListWebACLs",
+      "wafv2:TagResource",
+      "wafv2:UntagResource",
+      "wafv2:ListTagsForResource",
+      "wafv2:AssociateWebACL",
+      "wafv2:DisassociateWebACL",
+      "wafv2:GetWebACLForResource",
+    ]
+    resources = ["*"]
+  }
+
+  # WAFLogging — wafv2's logging-config actions have no resource type
+  # listed in AWS's own IAM reference (same as WAFManage, Resource "*").
+  # logs:CreateLogDelivery/DeleteLogDelivery/PutResourcePolicy/
+  # DescribeResourcePolicies are the actions AWS's own WAF-to-CloudWatch
+  # logging guide documents as required for the *caller* setting up
+  # delivery -- AWS's log-delivery service creates the log group's resource
+  # policy itself once these are granted, no manual policy JSON needed on
+  # our end. logs:DescribeLogGroups already covered account-wide by
+  # Foundation's policy, not repeated here.
+  statement {
+    effect = "Allow"
+    actions = [
+      "wafv2:PutLoggingConfiguration",
+      "wafv2:GetLoggingConfiguration",
+      "wafv2:DeleteLoggingConfiguration",
+      "logs:CreateLogDelivery",
+      "logs:DeleteLogDelivery",
+      "logs:PutResourcePolicy",
+      "logs:DescribeResourcePolicies",
+    ]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_policy" "deploy_compute_ext" {
   name        = local.deploy_policy_ext
-  description = "Scoped CI deploy-role permissions for compute's S3 bucket management, ACM certificate, and Route53 records (HTTPS listener)."
+  description = "Scoped CI deploy-role permissions for compute's S3 bucket management, ACM certificate, Route53 records (HTTPS listener), and WAF web ACL."
   policy      = data.aws_iam_policy_document.deploy_compute_ext.json
 }
 
