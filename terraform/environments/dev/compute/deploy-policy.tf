@@ -406,11 +406,36 @@ data "aws_iam_policy_document" "deploy_compute_ext" {
       "arn:aws:route53:::change/*",
     ]
   }
+
+  # WAFManage — web ACL + rate-based rule create/manage/associate for the
+  # /login and /buy protections. None of these wafv2 actions support
+  # resource-level ARN scoping -- confirmed via AWS's own IAM service-
+  # authorization reference for WAFV2 (every action below has no resource
+  # type listed there, meaning IAM requires Resource "*"). Same shape as
+  # ADR 0010's RunInstances precedent: unconditioned because AWS itself
+  # doesn't support scoping it, not a shortcut taken here.
+  statement {
+    effect = "Allow"
+    actions = [
+      "wafv2:CreateWebACL",
+      "wafv2:DeleteWebACL",
+      "wafv2:GetWebACL",
+      "wafv2:UpdateWebACL",
+      "wafv2:ListWebACLs",
+      "wafv2:TagResource",
+      "wafv2:UntagResource",
+      "wafv2:ListTagsForResource",
+      "wafv2:AssociateWebACL",
+      "wafv2:DisassociateWebACL",
+      "wafv2:GetWebACLForResource",
+    ]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_policy" "deploy_compute_ext" {
   name        = local.deploy_policy_ext
-  description = "Scoped CI deploy-role permissions for compute's S3 bucket management, ACM certificate, and Route53 records (HTTPS listener)."
+  description = "Scoped CI deploy-role permissions for compute's S3 bucket management, ACM certificate, Route53 records (HTTPS listener), and WAF web ACL."
   policy      = data.aws_iam_policy_document.deploy_compute_ext.json
 }
 
