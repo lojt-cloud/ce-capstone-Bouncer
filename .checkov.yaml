@@ -61,6 +61,25 @@ skip-check:
   # for now; a companion HTTPS listener and TLS policy land there.
   - CKV_AWS_2
   - CKV_AWS_103
+  # checkov graph-check limitation, not a real gap. Both of these are
+  # "connection exists" graph checks (CKV2_AWS_28: aws_lb <-> a WAF web
+  # ACL association; CKV2_AWS_31: aws_wafv2_web_acl <->
+  # aws_wafv2_web_acl_logging_configuration) and both fail to detect the
+  # connection here -- confirmed twice in the same PR, same fingerprint:
+  # every resource on each side of the connection (aws_lb.app,
+  # aws_wafv2_web_acl.app, aws_wafv2_web_acl_association.app,
+  # aws_wafv2_web_acl_logging_configuration.app) is conditioned on the
+  # same enable_billable_resources count, and checkov's graph-connection
+  # detection has a documented history of false negatives on exactly this
+  # shape (count = var.x ? 1 : 0 on both sides) -- see
+  # bridgecrewio/checkov#1230. The Terraform itself is correct: the WAF
+  # web ACL is associated to the ALB and has a logging configuration,
+  # both by direct reference (terraform/modules/compute/waf.tf). Verified
+  # for real after apply via `aws wafv2 get-web-acl-for-resource` and
+  # `aws wafv2 get-logging-configuration`, not just skipped and trusted --
+  # see 00-shared-context.md.
+  - CKV2_AWS_28
+  - CKV2_AWS_31
   # ALB-to-target traffic stays HTTP within the private VPC (target group
   # only reachable via app-sg, itself only reachable from alb-sg). TLS
   # terminates at the ALB edge once the HTTPS listener lands; full
@@ -111,19 +130,5 @@ skip-check:
   # regenerated with the resource anyway (RDS/ElastiCache toggle). A
   # production deployment would add this.
   - CKV2_AWS_57
-  # checkov graph-check limitation, not a real gap: CKV2_AWS_31 checks for
-  # a connection edge between aws_wafv2_web_acl and
-  # aws_wafv2_web_acl_logging_configuration in checkov's dependency graph.
-  # Both resources here are conditioned on the same
-  # enable_billable_resources count, and checkov's graph-connection
-  # detection has a documented history of false negatives on exactly this
-  # shape (count = var.x ? 1 : 0 on both sides of the connection) -- see
-  # bridgecrewio/checkov#1230. The Terraform itself is correct:
-  # aws_wafv2_web_acl_logging_configuration.app.resource_arn references
-  # aws_wafv2_web_acl.app[0].arn directly (terraform/modules/compute/waf.tf).
-  # Verified for real after apply via
-  # `aws wafv2 get-logging-configuration --resource-arn <web-acl-arn>`,
-  # not just skipped and trusted -- see 00-shared-context.md.
-  - CKV2_AWS_31
 compact: true
 quiet: true
