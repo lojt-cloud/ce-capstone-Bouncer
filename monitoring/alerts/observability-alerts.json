@@ -1,7 +1,7 @@
 {
   "sns_topic": "ce-capstone-bouncer-dev-observability-alerts",
   "notification_email": "lojtiboy@gmail.com",
-  "note": "Thresholds set by engineering judgment (t4g.micro sizing, 3-instance min ASG, known low traffic), not yet live-fire verified -- see project task list.",
+  "note": "Thresholds set by engineering judgment (t4g.micro sizing, 3-instance min ASG, known low traffic). Live-fire verified 2026-09-02: all 3 alarms manually forced to ALARM via aws cloudwatch set-alarm-state, real SNS email delivery confirmed on each.",
   "alerts": [
     {
       "name": "ce-capstone-bouncer-dev-high-5xx-rate",
@@ -19,7 +19,10 @@
       "description": "At least 1 target group host unhealthy for 2 consecutive minutes",
       "metric": "UnHealthyHostCount",
       "namespace": "AWS/ApplicationELB",
-      "dimensions": ["TargetGroup", "LoadBalancer"],
+      "dimensions": [
+        "TargetGroup",
+        "LoadBalancer"
+      ],
       "threshold": 0,
       "comparison": "GreaterThanThreshold",
       "period_seconds": 60,
@@ -31,7 +34,9 @@
       "description": "RDS CPU utilization above 80% for 10 consecutive minutes",
       "metric": "CPUUtilization",
       "namespace": "AWS/RDS",
-      "dimensions": ["DBInstanceIdentifier"],
+      "dimensions": [
+        "DBInstanceIdentifier"
+      ],
       "threshold": 80,
       "comparison": "GreaterThanThreshold",
       "period_seconds": 300,
