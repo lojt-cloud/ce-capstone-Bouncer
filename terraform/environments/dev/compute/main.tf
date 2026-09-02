@@ -9,6 +9,7 @@ module "compute" {
 
   project         = local.project
   environment     = local.environment
+  owner           = var.owner
   aws_region      = local.aws_region
   domain_name     = "app.projectbouncer.org"
   route53_zone_id = "Z09995842VAJQYF2C7UVK"
