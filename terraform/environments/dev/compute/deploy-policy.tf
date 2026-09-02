@@ -70,10 +70,18 @@ data "aws_iam_policy_document" "deploy_compute" {
     ]
   }
 
-  # ReadOnly — Describe*/List* actions with no resource-level IAM support
+  # ReadOnly — Describe*/List* actions with no resource-level IAM support.
+  # route53:ListHostedZones added 2026-09-02: data "aws_route53_zone" with
+  # zone_id set still calls ListHostedZones internally (pages all zones
+  # and filters client-side) rather than a scoped GetHostedZone lookup --
+  # confirmed via a real 403 under the deploy role. ListHostedZones has no
+  # resource-level IAM support at all (account-wide operation), so
+  # Resource "*" is the only option. Sixteenth confirmed case of this
+  # project's "looks scopeable, isn't" IAM pattern.
   statement {
     effect = "Allow"
     actions = [
+      "route53:ListHostedZones",
       "ec2:DescribeLaunchTemplates",
       "ec2:DescribeLaunchTemplateVersions",
       "autoscaling:DescribeAutoScalingGroups",
