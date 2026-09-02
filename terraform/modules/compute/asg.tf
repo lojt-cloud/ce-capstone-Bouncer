@@ -26,6 +26,11 @@ resource "aws_autoscaling_group" "app" {
     value               = "terraform"
     propagate_at_launch = true
   }
+  tag {
+    key                 = "Owner"
+    value               = var.owner
+    propagate_at_launch = true
+  }
   min_size            = var.asg_min_size
   max_size            = var.asg_max_size
   desired_capacity    = var.asg_desired_capacity
