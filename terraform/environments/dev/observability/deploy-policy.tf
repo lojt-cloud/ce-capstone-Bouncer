@@ -53,6 +53,15 @@ data "aws_iam_policy_document" "deploy_observability" {
       "arn:aws:cloudwatch:${local.aws_region}:${local.account_id}:alarm:${local.project}-${local.environment}-rds-high-cpu",
     ]
   }
+  # AlarmReadOnly — DescribeAlarms has no resource-level scoping support,
+  # same shape as DashboardListReadOnly above.
+  statement {
+    sid       = "AlarmReadOnly"
+    effect    = "Allow"
+    actions   = ["cloudwatch:DescribeAlarms"]
+    resources = ["*"]
+  }
+
   statement {
     sid    = "KmsKeyManage"
     effect = "Allow"
@@ -60,7 +69,6 @@ data "aws_iam_policy_document" "deploy_observability" {
       "kms:CreateKey",
       "kms:DescribeKey",
       "kms:GetKeyPolicy",
-      "kms:PutKeyPolicy",
       "kms:EnableKeyRotation",
       "kms:GetKeyRotationStatus",
       "kms:ScheduleKeyDeletion",
@@ -74,16 +82,12 @@ data "aws_iam_policy_document" "deploy_observability" {
     ]
     resources = ["*"]
   }
-  # AlarmReadOnly — AWS's docs show DescribeAlarms does support alarm-level
-  # scoping, but kept unscoped here matching this project's established
-  # convention for every other Describe/List action (RDS/ElastiCache
-  # Describe*, logs:DescribeLogGroups, cloudwatch:ListDashboards) — safer
-  # for Terraform's own bulk-refresh behavior than a tight scope.
+
   statement {
-    sid       = "AlarmReadOnly"
+    sid       = "KmsKeyPolicyManage"
     effect    = "Allow"
-    actions   = ["cloudwatch:DescribeAlarms"]
-    resources = ["*"]
+    actions   = ["kms:PutKeyPolicy"]
+    resources = [module.observability.sns_alerts_kms_key_arn]
   }
 
   # SnsTopicManage — same shape as foundation's drift-alerts precedent

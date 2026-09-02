@@ -7,3 +7,6 @@ output "dashboard_arn" {
 output "alerts_topic_arn" {
   value = aws_sns_topic.alerts.arn
 }
+output "sns_alerts_kms_key_arn" {
+  value = aws_kms_key.sns_alerts.arn
+}
