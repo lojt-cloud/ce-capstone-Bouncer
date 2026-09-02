@@ -81,6 +81,7 @@ if Config.CACHE_HOST:
 FAIL_KEY = "login:fail:{}"
 LOCK_KEY = "login:lock:{}"
 SESSION_KEY = "session:{}"
+BUY_RATE_KEY = "buy:attempts:{}"
 
 
 def get_imds_token():
@@ -264,18 +265,38 @@ def get_current_username():
         return None
     return json.loads(raw)["username"]
 
+def check_buy_rate_limit(username):
+    """Fixed-window counter, same INCR+EXPIRE shape as the login lockout
+    above, scoped to purchase attempts. This catches a single session
+    hammering /buy -- independent of the WAF's per-IP rate limit (edge,
+    coarse) and the DB's per-account unique constraint (precise, blocks
+    a second ticket outright). Three layers, three different attack
+    shapes -- document this once the WAF rule is confirmed working."""
+    key = BUY_RATE_KEY.format(username)
+    current = _redis_client.incr(key)
+    if current == 1:
+        _redis_client.expire(key, Config.BUY_RATE_LIMIT_WINDOW_SECONDS)
+    if current > Config.MAX_BUY_ATTEMPTS_PER_WINDOW:
+        ttl = _redis_client.ttl(key)
+        return False, max(ttl, 0)
+    return True, 0
 
 @app.route("/buy", methods=["POST"])
-
 def buy():
     username = get_current_username()
     if username is None:
         return jsonify({"error": "authentication required"}), 401
 
+    try:
+        allowed, retry_after = check_buy_rate_limit(username)
+    except redis.RedisError:
+        return jsonify({"error": "cache tier unreachable"}), 503
+    if not allowed:
+        return jsonify({"error": "too many purchase attempts", "retry_after_seconds": retry_after}), 429
+
     conn = get_db_connection()
     if conn is None:
         return jsonify({"error": "database tier not configured"}), 503
-
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT id FROM users WHERE username = %s", (username,))
