@@ -21,6 +21,13 @@ resource "aws_kms_key" "sns_alerts" {
         Principal = { Service = "cloudwatch.amazonaws.com" }
         Action    = ["kms:Decrypt", "kms:GenerateDataKey*"]
         Resource  = "*"
+      },
+      {
+        Sid       = "AllowBudgetsToPublish"
+        Effect    = "Allow"
+        Principal = { Service = "budgets.amazonaws.com" }
+        Action    = ["kms:Decrypt", "kms:GenerateDataKey*"]
+        Resource  = "*"
       }
     ]
   })
