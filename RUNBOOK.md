@@ -1,261 +1,977 @@
 # Runbook
 
-## RDS recreation / schema recovery
+## 1. Scope
 
-The `users` table is not managed by Terraform and has no separate
-migration step. The app itself runs `app/src/schema.sql`
-(`CREATE TABLE IF NOT EXISTS`) on every boot, right after it opens its
-DB connection pool -- so if RDS is ever destroyed and recreated, the
-schema is restored automatically on the next instance boot or deploy,
-with no manual `psql` step required. This only creates the table
-structure; any data (e.g. test users) is gone if RDS was actually
-destroyed and needs to be reseeded manually.
+This runbook covers the normal operating procedures for the Bouncer dev environment:
 
-Verified 2026-08-31: dropped `users` on the live dev RDS instance,
-triggered an ASG instance refresh, confirmed the app recreated the
-table with the same schema on the fresh instance, reseeded a test
-user, and confirmed login worked end to end via the ALB.
+- bring-up
+- teardown
+- database recovery after RDS recreation
+- test-user reseeding
+- login and ticket-purchase verification
+- CI/CD checks
+- drift detection
+- common AWS failures
 
-Bring-up ordering avoids the ASG instance refresh (2026-09-02). Bring
-layers up foundation → data-tier → compute, not foundation → compute →
-data-tier. Since `terraform apply` blocks on each resource's own
-create-timeout waiter, sequencing data-tier before compute means the
-ASG's instances never boot until RDS/ElastiCache already exist -- the DB
-pool opens and schema self-heal runs on first boot. Confirmed live
-2026-09-02: tier-status page showed `Database: CONNECTED` immediately
-after compute's apply, with no instance refresh needed (unlike the
-2026-09-01 rebuild, which used the old order and required one). Use this
-order for every future full bring-up.
+The environment runs in `eu-central-1`.
 
-Recreating the RDS instance or ElastiCache replication group (toggle,
-replacement, or manual recreate) always forces a replacement of its
-Secrets Manager secret version too -- the secret's JSON payload embeds
-the live endpoint address, which is unknown until the new resource
-exists. This is expected, not a bug; the secret container itself never
-gets destroyed.
+The Terraform roots are:
 
-## Reseeding test users after RDS recreate
+```text
+terraform/environments/dev/
+  foundation/
+  data-tier/
+  compute/
+  observability/
+```
 
-**Automated:** `scripts/reseed-test-user.sh <username> <password>` does
-the steps below non-interactively via SSM Run Command and verifies login
-against the ALB — use this for demos. The manual walkthrough remains for
-troubleshooting when the script fails partway.
+The lifecycle scripts are:
 
-Whenever RDS is destroyed and recreated (the `enable_billable_resources`
-toggle off/on in `terraform/environments/dev/data-tier`, or any other
-reason the instance gets replaced), the `users` table schema recreates
-itself automatically (see above) but any rows are gone. Steps to get
-back to a working test login, start to finish:
+```text
+scripts/bringup.sh
+scripts/teardown.sh
+scripts/reseed-test-user.sh
+```
 
-### 1. Confirm the app tier is healthy first
+---
 
-Don't reseed until the schema actually exists -- the self-heal only runs
-once the app successfully opens a DB connection.
+## 2. Important warning
 
-    cd ~/cloud-engineering/ce-capstone-Bouncer/terraform/environments/dev/compute
-    terraform output asg_name
+A full teardown is destructive.
 
-    aws autoscaling describe-auto-scaling-groups \
-      --auto-scaling-group-names <asg_name> \
-      --region eu-central-1 \
-      --query "AutoScalingGroups[0].Instances[].{Id:InstanceId,Health:HealthStatus,State:LifecycleState}" \
-      --output table
+RDS and ElastiCache are destroyed when the billable-resource toggle is disabled.
 
-All instances should show `Healthy` / `InService`.
+RDS is configured without deletion protection and without a final snapshot.
 
-### 2. Get a running instance ID and connect via SSM
+A full teardown therefore removes:
 
-    aws autoscaling describe-auto-scaling-groups \
-      --auto-scaling-group-names <asg_name> \
-      --region eu-central-1 \
-      --query "AutoScalingGroups[0].Instances[?LifecycleState=='InService'].InstanceId" \
-      --output text
+- database row data
+- Redis state
+- application instances
+- load balancer
+- WAF
+- NAT Gateway
+- related billable networking resources
 
-    aws ssm start-session --target <instance-id> --region eu-central-1
+The database schema is recreated automatically by the application after the next bring-up, but test users and purchased tickets must be reseeded.
 
-Everything below runs inside that session.
+Do not run teardown against an environment containing data that must be preserved.
 
-### 3. Install psql (fresh instance, not baked into the AMI)
+---
 
-    which psql || sudo dnf install -y postgresql16
+## 3. Billable-resource toggle
 
-### 4. Pull DB credentials fresh from Secrets Manager
+Billable resources are controlled through:
 
-Don't hardcode the host or password anywhere -- fetch live every time,
-since a real RDS recreate can produce a new endpoint hostname.
+```text
+enable_billable_resources
+```
 
-    sudo systemctl show bouncer-app -p Environment
-    # copy the DB_SECRET_NAME value from the output, then:
+The value is stored in each layer's committed:
 
-    aws secretsmanager get-secret-value \
-      --secret-id ce-capstone-bouncer-dev-db-credentials \
-      --region eu-central-1 \
-      --query SecretString --output text
+```text
+terraform/environments/dev/<layer>/dev.auto.tfvars
+```
 
-That prints JSON with `host`, `port`, `dbname`, `username`, `password`.
+The lifecycle scripts update these files before running Terraform.
 
-### 5. Connect and confirm the schema is there
+This is intentional.
 
-    PGPASSWORD='<password from step 4>' psql -h <host from step 4> -p 5432 -U bouncer_admin -d bouncer -c "\dt" -c "\d users"
+The desired state is visible to both local Terraform and CI instead of being hidden in a temporary `-var` argument.
 
-Expect the `users` table with 4 columns -- no manual `CREATE TABLE`
-needed; the app already did it.
+The main billable layers are:
 
-### 6. Generate a bcrypt hash for the new password
+- `foundation`
+- `data-tier`
+- `compute`
 
-Use the app's own venv already on the instance -- no laptop dependency
-needed.
+The `observability` layer is not part of the billable-resource lifecycle toggle.
 
-    /opt/bouncer-app/venv/bin/python3 -c "import bcrypt; print(bcrypt.hashpw(b'YOUR_PASSWORD_HERE', bcrypt.gensalt()).decode())"
+---
 
-Pick a password with no `!`, `$`, backtick, or other shell-special
-characters -- bash history expansion mangles `!` even inside single
-quotes.
+## 4. Bring-up
 
-### 7. Insert the test user
+Use:
 
-Reconnect to psql if you exited it in step 5:
+```bash
+cd ~/cloud-engineering/ce-capstone-Bouncer
+./scripts/bringup.sh
+```
 
-    PGPASSWORD='<password from step 4>' psql -h <host from step 4> -p 5432 -U bouncer_admin -d bouncer
+The script brings the environment up in this order:
 
-    INSERT INTO users (username, password_hash) VALUES ('testuser', '<hash from step 6>');
+```text
+foundation
+    |
+    v
+data-tier
+    |
+    v
+compute
+```
 
-Expect `INSERT 0 1`. Then `\q` and `exit` to leave psql and the SSM
-session.
+This order matters.
 
-### 8. Verify login end to end
+The compute layer should only start after RDS and ElastiCache exist. This lets the application open its database connection against the newly created RDS instance during first boot.
 
-Back on your laptop:
+The script:
 
-    cd ~/cloud-engineering/ce-capstone-Bouncer/terraform/environments/dev/compute
-    terraform output alb_dns_name
+1. sets each layer's `enable_billable_resources` value to `true`
+2. applies `foundation`
+3. applies `data-tier`
+4. waits for RDS to become available
+5. applies `compute`
+6. waits for the ASG to have the expected healthy `InService` instances
+7. checks ALB target health
 
-    curl -i -X POST http://<alb_dns_name>/login \
-      -H "Content-Type: application/json" \
-      -d '{"username":"testuser","password":"YOUR_PASSWORD_HERE"}'
+A successful run ends with:
 
-Expect `200 OK` with a `Set-Cookie: session_id=...` header. That
-confirms the full path: RDS reachable, schema present, row inserted,
-bcrypt verified, session written to Redis, cookie issued.
+```text
+=== Bring-up complete ===
+```
 
-Note: this procedure is only needed after an actual RDS destroy/recreate.
-Redeploying the app alone (`./app/deploy.sh`) or an ASG instance refresh
-with RDS untouched leaves existing rows intact -- no reseed needed.
+and reports the number of healthy ASG instances and ALB targets.
 
-## NAT Gateway EIP release failure on toggle-off
+### Verified bring-up
 
-Foundation's apply can fail releasing the NAT Gateway's EIP with
-`InvalidNetworkInterfaceID.NotFound`. Root cause (confirmed 2026-09-01):
-a short-lived AWS-side race -- `ReleaseAddress` 400s on the NAT
-Gateway's just-deleted ENI for well under a minute right after the
-gateway finishes destroying, then clears on its own. Not a state issue;
-**no manual EIP release or `terraform state rm` needed** -- just retry.
-`teardown.sh`'s own EIP-release fallback (PR #62) now retries
-automatically up to 5 times with a 15s backoff, so this shouldn't need
-manual intervention when using that script. If hit outside
-`teardown.sh`, wait ~1 minute and re-apply using the committed
-`dev.auto.tfvars` (not a `-var` flag).
+The current script has been tested after a complete teardown.
 
-## CI/CD Pipeline
+The tested result was:
 
-**Plan** (`.github/workflows/terraform-plan.yml`) — triggers on every PR,
-unconditionally (no path filter — see why in the required-status-check
-note below). Two jobs:
-1. `fmt + checkov` — `terraform fmt -check`, then a full Checkov scan of
-   `terraform/` against `.checkov.yaml`. No AWS credentials needed; fails
-   fast before spending time on a real plan.
-2. `plan` — matrixed per layer (`foundation`, `compute`, `data-tier`).
-   Assumes the OIDC deploy role,
-   runs `terraform plan`, posts the output as a PR comment even on
-   failure (so the reviewer sees the real error, not just a red X).
+```text
+Healthy InService instances: 3 / 3
+Healthy ALB targets: 3 / 3
+```
 
-**Apply** (`.github/workflows/terraform-apply.yml`) — triggers on push to
-`main` (i.e. on PR merge) that touches `terraform/**` or the workflow file
-itself. Same matrix scope as plan (`foundation`, `compute`, `data-tier`),
-same OIDC role. Runs `terraform apply -auto-approve`, writes the output to
-the run's job summary.
+The script did not commit or push the `dev.auto.tfvars` changes.
 
-**Branch protection** enforces the PR flow: `main` requires a PR for every
-change (`enforce_admins: true` — applies even to the repo owner, no direct
-push), 0 required approvals, force-push and deletion disabled. **One
-required status check, `All checks passed`** — a fan-in job in
-`terraform-plan.yml` that depends on the whole `fmt+checkov`/`plan`
-matrix and reports a single pass/fail, so branch protection never needs
-reconfiguring as the matrix grows (e.g. when `data-tier` is added).
-`strict: true` also means a PR's branch must be up to date with `main`
-before it can merge. This is also why `plan` has no path filter: a
-required check tied to a path-filtered workflow gets stuck "Pending"
-forever on any PR that doesn't touch those paths — a known,
-still-unresolved GitHub limitation (confirmed via GitHub's own
-troubleshooting docs), not a bug in this setup.
+---
 
-**Billable-resource on/off toggle**: each layer's `enable_billable_resources`
-lives in a committed `dev.auto.tfvars` (`terraform/environments/dev/<layer>/`),
-not a runtime flag — both local Terraform and CI load it automatically.
-To bring any layer back up: flip that file to `true`, open a PR, merge —
-the apply workflow does the real `terraform apply`. All three layers
-(foundation, compute, data-tier) are now CI-wired end to end (plan, apply,
-drift detection). **Caveat:** data-tier's RDS/ElastiCache create/destroy
-path through the deploy role has not actually been exercised yet — the
-policy was verified against a clean read-only plan and a 0-change apply
-while the toggle is off, same starting position foundation and compute
-were in before their first real create. Expect the possibility of a
-missing write-path permission the first time this toggle actually flips
-true through CI, per the standing lesson in `00-shared-context.md`.
-`./teardown.sh` writes `false` into all three layers' files and applies
-compute, then data-tier, then foundation locally — reverse-dependency
-order, most-dependent first — run it, then commit the resulting
-`dev.auto.tfvars` changes so CI doesn't try to undo them on the next
-merge.
+## 5. Teardown
 
-**Update, 2026-09-01 / 09-02:** the caveat above was real. Data-tier's
-first toggle-on hit three missing write-path permissions
-(`rds:CreateDBInstance` needing the subnet-group ARN;
-`elasticache:CreateReplicationGroup` needing both the parameter-group and
-subnet-group ARNs — see `00-shared-context.md`'s CI/CD auth facts, cases
-13–15), fixed across PRs #57–#58. All three layers have since been fully
-torn down and brought back up twice (2026-09-01, 2026-09-02) with zero
-new IAM gaps on the second cycle — the deploy role's full create/destroy
-lifecycle for all three layers is now proven, not just planned.
+Run:
 
-**Drift detection** (`.github/workflows/drift-detection.yml`) — scheduled
-nightly at `0 3 * * *` UTC (roughly 4-5am Central Europe, depending on
-DST), plus `workflow_dispatch` for manual runs. Same matrix scope as plan
-and apply (`foundation`, `compute`, `data-tier`). Runs
-`terraform plan -detailed-exitcode` per layer: exit 0 means clean (no
-alert, job passes), exit 2 means real drift was detected (out-of-band
-change, or the environment doesn't match its `dev.auto.tfvars` toggle),
-exit 1 means the plan itself errored. Exit 2 and exit 1 both publish to
-the SNS topic below with distinct subject lines and both fail the job, so
-drift and a broken check are never confused with each other — check the
-Actions tab if the nightly run shows red.
+```bash
+cd ~/cloud-engineering/ce-capstone-Bouncer
+./scripts/teardown.sh
+```
 
-**Alerting** — SNS topic `ce-capstone-bouncer-dev-drift-alerts`
-(`arn:aws:sns:eu-central-1:743631836010:ce-capstone-bouncer-dev-drift-alerts`),
-KMS-encrypted at rest, one email subscription. Defined in
-`terraform/environments/dev/foundation/drift-alerts.tf` alongside a
-supplemental IAM policy on the deploy role scoped to just this topic. Not
-gated by the billable-resources toggle — negligible cost, stays alive
-through a full teardown so the nightly check can still confirm "nothing
-drifted" even when the environment is intentionally off.
+The script asks for explicit confirmation before continuing.
 
-## Alarm fires but no email arrives
+Teardown runs in reverse dependency order:
 
-Check alarm action history, not just alarm state:
+```text
+compute
+    |
+    v
+data-tier
+    |
+    v
+foundation
+```
 
-  aws cloudwatch describe-alarm-history --alarm-name <name> \
-    --history-item-type Action --max-records 3 --output text
+The script sets the three billable layers to:
 
-If `error` shows "CloudWatch Alarms does not have authorization to access
-the SNS topic encryption key", the SNS topic's KMS key policy doesn't
-grant cloudwatch.amazonaws.com kms:Decrypt / kms:GenerateDataKey*. This
-happens if the topic ever gets pointed back at alias/aws/sns (the
-AWS-managed key) instead of aws_kms_key.sns_alerts — that key's policy
-can't be edited, so alarms silently fail to publish. Fix is to point
-kms_master_key_id back at the CMK, never the managed alias.
+```text
+enable_billable_resources = false
+```
 
-To manually verify any alarm's SNS wiring without waiting for a real
-breach:
+and applies each layer.
 
-  aws cloudwatch set-alarm-state --alarm-name <name> \
-    --state-value ALARM --state-reason "manual test"
+### NAT Gateway / EIP race
+
+AWS can briefly return:
+
+```text
+InvalidNetworkInterfaceID.NotFound
+```
+
+when Terraform releases the EIP immediately after deleting the NAT Gateway.
+
+This is an AWS-side timing issue around the deleted NAT Gateway network interface.
+
+The teardown script has a retry path for the EIP release.
+
+During the latest full teardown test, the NAT Gateway finished deleting, but the EIP release still failed after the script's retries. The EIP was then released manually once the NAT Gateway's ENI no longer existed.
+
+The resulting Terraform state was reconciled with:
+
+```bash
+terraform apply -refresh-only
+```
+
+The final foundation plan returned:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+If the race happens again outside the script, check whether the EIP still exists:
+
+```bash
+aws ec2 describe-addresses \
+  --allocation-ids <allocation-id> \
+  --region eu-central-1
+```
+
+If the allocation still exists and the NAT Gateway is already deleted, retry the release:
+
+```bash
+aws ec2 release-address \
+  --allocation-id <allocation-id> \
+  --region eu-central-1
+```
+
+Then refresh the foundation state:
+
+```bash
+cd ~/cloud-engineering/ce-capstone-Bouncer/environments/dev/foundation
+terraform apply -refresh-only
+terraform plan
+```
+
+The expected final plan is:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+---
+
+## 6. Verify the environment after bring-up
+
+Check the ASG:
+
+```bash
+aws autoscaling describe-auto-scaling-groups \
+  --auto-scaling-group-names ce-capstone-bouncer-dev-app-asg \
+  --region eu-central-1 \
+  --query "AutoScalingGroups[0].Instances[].{Id:InstanceId,Health:HealthStatus,State:LifecycleState}" \
+  --output table
+```
+
+Expected:
+
+```text
+Health    State
+Healthy   InService
+```
+
+At normal capacity there should be three healthy instances.
+
+Check RDS:
+
+```bash
+aws rds describe-db-instances \
+  --db-instance-identifier ce-capstone-bouncer-dev-db \
+  --region eu-central-1 \
+  --query 'DBInstances[0].DBInstanceStatus'
+```
+
+Expected:
+
+```text
+"available"
+```
+
+Check the public HTTPS endpoint:
+
+```bash
+curl -I https://app.projectbouncer.org/health
+```
+
+Expected:
+
+```text
+HTTP/2 200
+```
+
+Check the HTTP redirect:
+
+```bash
+curl -I http://app.projectbouncer.org/health
+```
+
+Expected:
+
+```text
+301
+Location: https://app.projectbouncer.org/health
+```
+
+---
+
+## 7. RDS recreation and schema recovery
+
+The application owns the database schema.
+
+The schema file is:
+
+```text
+app/src/schema.sql
+```
+
+It creates:
+
+```text
+users
+events
+tickets
+```
+
+in dependency order.
+
+The application applies this SQL during startup.
+
+The schema is not Terraform-managed.
+
+A full RDS recreation removes table data, so the recovery sequence is:
+
+```text
+RDS recreated
+    |
+    v
+application starts
+    |
+    v
+schema.sql runs
+    |
+    v
+reseed test user
+    |
+    v
+verify login
+```
+
+Do not assume that a healthy EC2 instance means the schema is ready. Check the application logs if reseeding fails.
+
+To inspect schema initialization logs on a running instance:
+
+```bash
+INSTANCE_ID=$(aws autoscaling describe-auto-scaling-groups \
+  --auto-scaling-group-names ce-capstone-bouncer-dev-app-asg \
+  --region eu-central-1 \
+  --query "AutoScalingGroups[0].Instances[?LifecycleState=='InService']|[0].InstanceId" \
+  --output text)
+
+CMD_ID=$(aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name "AWS-RunShellScript" \
+  --parameters 'commands=["sudo journalctl -u bouncer-app --no-pager -n 200 | grep -i -E '\''schema init|schema.sql|postgres|database|error'\'' || true"]' \
+  --region eu-central-1 \
+  --query "Command.CommandId" \
+  --output text)
+
+aws ssm wait command-executed \
+  --command-id "$CMD_ID" \
+  --instance-id "$INSTANCE_ID" \
+  --region eu-central-1
+
+aws ssm get-command-invocation \
+  --command-id "$CMD_ID" \
+  --instance-id "$INSTANCE_ID" \
+  --region eu-central-1 \
+  --query '{Status:Status,StdOut:StandardOutputContent,StdErr:StandardErrorContent}' \
+  --output json
+```
+
+A successful schema initialization should not report:
+
+```text
+[schema init] failed to apply schema.sql
+```
+
+---
+
+## 8. Reseed a test user
+
+After a real RDS destroy/recreate, use:
+
+```bash
+cd ~/cloud-engineering/ce-capstone-Bouncer
+./scripts/reseed-test-user.sh <username> <password>
+```
+
+Example:
+
+```bash
+./scripts/reseed-test-user.sh demo-user 'TemporaryTestPassword123!'
+```
+
+The password is passed to the script and used to generate a bcrypt hash on the application instance.
+
+The script:
+
+1. checks the ASG for a healthy `InService` instance
+2. sends the reseed command through SSM
+3. retrieves the current database secret from Secrets Manager
+4. hashes the password with bcrypt
+5. inserts or updates the user
+6. verifies login against the public HTTPS domain
+
+A successful reseed includes:
+
+```text
+SEEDED_OK
+```
+
+followed by a successful login response.
+
+### HTTPS verification
+
+The reseed script verifies:
+
+```text
+https://app.projectbouncer.org/login
+```
+
+Do not change this back to the ALB's HTTP endpoint.
+
+The ALB intentionally redirects HTTP to HTTPS.
+
+---
+
+## 9. Manual schema troubleshooting
+
+When the automated reseed script fails, connect to an instance with SSM:
+
+```bash
+aws autoscaling describe-auto-scaling-groups \
+  --auto-scaling-group-names ce-capstone-bouncer-dev-app-asg \
+  --region eu-central-1 \
+  --query "AutoScalingGroups[0].Instances[?LifecycleState=='InService'].InstanceId" \
+  --output text
+```
+
+Then:
+
+```bash
+aws ssm start-session \
+  --target <instance-id> \
+  --region eu-central-1
+```
+
+Inside the instance, check whether `psql` exists:
+
+```bash
+which psql || sudo dnf install -y postgresql16
+```
+
+The server is PostgreSQL 17. The client package may report a version difference, which is acceptable for the commands used in this runbook.
+
+Fetch the current database secret:
+
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id ce-capstone-bouncer-dev-db-credentials \
+  --region eu-central-1 \
+  --query SecretString \
+  --output text
+```
+
+Use the returned values for:
+
+- `host`
+- `port`
+- `dbname`
+- `username`
+- `password`
+
+Check the schema:
+
+```bash
+PGPASSWORD='<database password>' \
+psql \
+  -h <database host> \
+  -p 5432 \
+  -U bouncer_admin \
+  -d bouncer \
+  -c "\\dt"
+```
+
+Expected tables:
+
+```text
+users
+events
+tickets
+```
+
+Do not manually create the tables unless debugging has established that the application cannot initialize the schema.
+
+---
+
+## 10. Login verification
+
+From the laptop:
+
+```bash
+curl -i -X POST https://app.projectbouncer.org/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"YOUR_USERNAME","password":"YOUR_PASSWORD"}'
+```
+
+Expected:
+
+```text
+HTTP/2 200
+```
+
+with a `Set-Cookie` header containing:
+
+```text
+Secure
+HttpOnly
+SameSite=Lax
+```
+
+To verify the session:
+
+```bash
+rm -f cookies.txt
+
+curl -i -c cookies.txt \
+  -X POST https://app.projectbouncer.org/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"YOUR_USERNAME","password":"YOUR_PASSWORD"}'
+
+curl -i -b cookies.txt \
+  https://app.projectbouncer.org/me
+```
+
+Expected `/me` response:
+
+```json
+{"authenticated":true,"username":"YOUR_USERNAME"}
+```
+
+Do not commit `cookies.txt`.
+
+---
+
+## 11. End-to-end purchase verification
+
+Use a fresh test user when you need to prove that the first purchase succeeds.
+
+### Login
+
+```bash
+rm -f buy-cookies.txt
+
+curl -i -c buy-cookies.txt \
+  -X POST https://app.projectbouncer.org/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"YOUR_USERNAME","password":"YOUR_PASSWORD"}'
+```
+
+Expected:
+
+```text
+HTTP/2 200
+```
+
+### First purchase
+
+```bash
+curl -i -b buy-cookies.txt \
+  -X POST https://app.projectbouncer.org/buy
+```
+
+Expected for a user without a ticket:
+
+```text
+HTTP/2 201
+```
+
+Example response:
+
+```json
+{"event":"Bouncer Launch Night","status":"ok","ticket_id":1}
+```
+
+### Repeat purchase
+
+Run the same request again:
+
+```bash
+curl -i -b buy-cookies.txt \
+  -X POST https://app.projectbouncer.org/buy
+```
+
+Expected:
+
+```text
+HTTP/2 409
+```
+
+with an error such as:
+
+```json
+{"error":"already have a ticket for this event"}
+```
+
+This verifies the one-ticket-per-user behavior on the live application.
+
+Remove local cookie files after the test:
+
+```bash
+rm -f cookies.txt buy-cookies.txt
+```
+
+---
+
+## 12. WAF rate-limit verification
+
+The WAF has rate-based rules on `/login` and `/buy`.
+
+The configured limit is:
+
+```text
+10 requests per 300 seconds per source IP
+```
+
+To test the live `/buy` protection:
+
+```bash
+for i in $(seq 1 12); do
+  echo "=== request $i ==="
+  curl -s -o /dev/null -w "HTTP %{http_code}\\n" \
+    -b buy-cookies.txt \
+    -X POST https://app.projectbouncer.org/buy
+done
+```
+
+In the latest live test, the sequence was:
+
+```text
+409
+409
+409
+409
+409
+429
+429
+429
+429
+429
+429
+429
+```
+
+The `409` responses were generated by the application because the test user already had a ticket.
+
+The later `429` responses demonstrated that the public `/buy` protection was active.
+
+When interpreting rate-limit tests, distinguish:
+
+- application `429` responses
+- WAF blocking behavior
+- normal application `409` duplicate-ticket responses
+
+Do not claim that a specific layer fired unless the response and test conditions prove it.
+
+---
+
+## 13. Application deployment
+
+Application changes are deployed separately from Terraform infrastructure changes.
+
+Run:
+
+```bash
+cd ~/cloud-engineering/ce-capstone-Bouncer
+./app/deploy.sh
+```
+
+The deployment script packages the application, uploads the artifact to the S3 artifact bucket, and triggers an ASG instance refresh.
+
+A successful deployment should be followed by:
+
+```bash
+aws autoscaling describe-auto-scaling-groups \
+  --auto-scaling-group-names ce-capstone-bouncer-dev-app-asg \
+  --region eu-central-1 \
+  --query "AutoScalingGroups[0].Instances[].{Id:InstanceId,Health:HealthStatus,State:LifecycleState}" \
+  --output table
+```
+
+Confirm that the expected instances are `Healthy` and `InService`.
+
+---
+
+## 14. Terraform checks
+
+For a read-only infrastructure check:
+
+```bash
+terraform plan
+```
+
+Run it from the relevant layer directory.
+
+The normal clean result is:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+For all three CI-managed layers:
+
+```bash
+cd terraform/environments/dev/foundation
+terraform plan
+
+cd ../data-tier
+terraform plan
+
+cd ../compute
+terraform plan
+```
+
+The `observability` layer exists separately and is not included in the current CI plan/apply/drift matrices.
+
+---
+
+## 15. CI/CD
+
+### Pull request checks
+
+Every pull request runs:
+
+```text
+terraform fmt -check
+Checkov
+Terraform plan
+```
+
+Terraform plans run for:
+
+```text
+foundation
+compute
+data-tier
+```
+
+The CI jobs assume AWS credentials through GitHub OIDC.
+
+The deployment role is:
+
+```text
+ce-capstone-bouncer-deploy
+```
+
+No long-lived AWS access keys are stored in the workflow.
+
+A final `All checks passed` job is the required branch-protection status.
+
+### Apply
+
+After a PR is merged into `main`, the apply workflow runs for Terraform-related changes.
+
+### Drift detection
+
+The drift workflow runs nightly and can also be started manually.
+
+It uses:
+
+```bash
+terraform plan -detailed-exitcode
+```
+
+Exit codes:
+
+```text
+0 = no changes
+1 = plan error
+2 = drift detected
+```
+
+Exit 1 and exit 2 are treated differently in the alerting path.
+
+---
+
+## 16. Branch protection
+
+Changes to `main` must go through a pull request.
+
+The normal flow is:
+
+```text
+feature branch
+    |
+    v
+push branch
+    |
+    v
+pull request
+    |
+    v
+CI checks
+    |
+    v
+All checks passed
+    |
+    v
+squash merge
+    |
+    v
+main
+```
+
+Do not push directly to `main`.
+
+---
+
+## 17. HTTPS, WAF, and budget quick checks
+
+### HTTPS
+
+```bash
+curl -I http://app.projectbouncer.org/health
+curl -I https://app.projectbouncer.org/health
+```
+
+Expected:
+
+```text
+HTTP -> 301 redirect
+HTTPS -> HTTP/2 200
+```
+
+### WAF attachment
+
+```bash
+aws wafv2 get-web-acl-for-resource \
+  --resource-arn <alb-arn> \
+  --region eu-central-1
+```
+
+WAF logging:
+
+```bash
+aws wafv2 get-logging-configuration \
+  --resource-arn <web-acl-arn> \
+  --region eu-central-1
+```
+
+### Budget
+
+```bash
+aws budgets describe-notifications-for-budget \
+  --account-id <account-id> \
+  --budget-name ce-capstone-bouncer-dev-monthly
+```
+
+The budget uses the same SNS notification path as the infrastructure alarms.
+
+---
+
+## 18. Alarm fires but no email arrives
+
+Check alarm action history:
+
+```bash
+aws cloudwatch describe-alarm-history \
+  --alarm-name <alarm-name> \
+  --history-item-type Action \
+  --max-records 3 \
+  --output text
+```
+
+If the error mentions that CloudWatch Alarms cannot use the SNS topic encryption key, verify that the SNS topic still uses the project's customer-managed KMS key.
+
+The alarm path depends on the SNS KMS key policy allowing CloudWatch to publish.
+
+The AWS-managed `alias/aws/sns` key should not be substituted for the project CMK.
+
+AWS Budgets uses the same topic but has its own authorization requirements in the SNS resource policy and KMS policy.
+
+---
+
+## 19. Observability limitation
+
+The `observability` Terraform root is implemented.
+
+It is not currently included in the three GitHub Actions matrices for:
+
+- plan
+- apply
+- drift detection
+
+Therefore do not describe observability as having the same CI validation level as `foundation`, `data-tier`, and `compute`.
+
+---
+
+## 20. Common mistakes
+
+### Reseed fails with `relation "users" does not exist`
+
+Check the application startup logs.
+
+The current `schema.sql` must create `users` before `tickets`.
+
+A previous regression removed the `users` definition from the schema. It was restored and verified during the full teardown/bring-up test.
+
+### Reseed ends with HTTP 301
+
+Check that the script uses:
+
+```text
+https://app.projectbouncer.org/login
+```
+
+The ALB intentionally redirects HTTP to HTTPS.
+
+### ASG exists but application is not healthy
+
+Check:
+
+```bash
+aws autoscaling describe-auto-scaling-groups ...
+```
+
+and the application logs through SSM.
+
+Then verify:
+
+```bash
+curl -I https://app.projectbouncer.org/health
+```
+
+### Terraform says the EIP changed outside Terraform
+
+This can happen after the NAT Gateway/EIP deletion race.
+
+Run:
+
+```bash
+terraform apply -refresh-only
+terraform plan
+```
+
+The goal is to reconcile Terraform state with the current AWS state.
+
+---
+
+## 21. Operational lessons from the latest full test
+
+The complete teardown and bring-up test exposed two real issues that normal day-to-day operation had not exposed:
+
+1. AWS can race while the NAT Gateway's network interface disappears before EIP release completes.
+2. A regression in `app/src/schema.sql` removed the `users` table definition, which only became visible after RDS was recreated from scratch.
+
+Both issues were fixed.
+
+The lifecycle scripts were then revalidated.
+
+The final live application verification showed:
+
+```text
+login       -> 200
+/me         -> 200
+first /buy  -> 201
+repeat /buy -> 409
+rate limit  -> 429
+```
+
+These checks were performed against the live AWS environment rather than only against local code.
