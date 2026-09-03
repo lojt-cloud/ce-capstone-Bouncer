@@ -1,0 +1,115 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="lnSFnuEffY3HonHnMRO2">
+    <mxGraphModel dx="3321" dy="2633" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="" vertex="1">
+          <mxGeometry height="860" width="1000" x="-240" y="-220" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-2" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="VPC&lt;br&gt;10.0.0.0/16&lt;br&gt;eu-central-1" vertex="1">
+          <mxGeometry height="60" width="70" x="535" y="-210" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="" vertex="1">
+          <mxGeometry height="770" width="200" x="-190" y="-140" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="" vertex="1">
+          <mxGeometry height="770" width="200" x="10" y="-140" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="" vertex="1">
+          <mxGeometry height="770" width="200" x="214" y="-140" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-6" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="eu-central-1a&lt;br&gt;AZ&lt;br&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="100" x="-150" y="-130" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-7" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="eu-central-1c&lt;div&gt;AZ&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="100" x="264" y="-130" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-8" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="eu-central-1b&lt;br&gt;AZ&lt;br&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="110" x="55" y="-130" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-9" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Public subnet&lt;br&gt;10.0.0.0/24" vertex="1">
+          <mxGeometry height="240" width="120" x="-160" y="-30" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Private subnet&lt;div&gt;10.0.10.0/24&lt;/div&gt;" vertex="1">
+          <mxGeometry height="240" width="120" x="-160" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Public subnet&lt;br&gt;10.0.1.0/24" vertex="1">
+          <mxGeometry height="240" width="120" x="50" y="-30" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-13" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Public subnet&lt;br&gt;10.0.2.0/24" vertex="1">
+          <mxGeometry height="240" width="120" x="254" y="-30" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-15" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Private subnet&lt;div&gt;10.0.11.0/24&lt;/div&gt;" vertex="1">
+          <mxGeometry height="240" width="120" x="50" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-16" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Private subnet&lt;div&gt;10.0.12.0/24&lt;/div&gt;" vertex="1">
+          <mxGeometry height="240" width="120" x="254" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-17" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;" value="ALB node" vertex="1">
+          <mxGeometry height="60" width="100" x="-150" y="-20" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-18" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;" value="NAT Gateway" vertex="1">
+          <mxGeometry height="60" width="100" x="-150" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-19" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;" value="ALB node" vertex="1">
+          <mxGeometry height="60" width="100" x="60" y="-20" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-20" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;" value="ALB node" vertex="1">
+          <mxGeometry height="60" width="100" x="264" y="-20" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-21" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;" value="EC2 instance" vertex="1">
+          <mxGeometry height="70" width="100" x="-150" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-22" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;" value="EC2 instance" vertex="1">
+          <mxGeometry height="70" width="100" x="65" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-23" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;" value="EC2 instance" vertex="1">
+          <mxGeometry height="70" width="100" x="264" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-26" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;div&gt;Public Route Table&lt;/div&gt;&lt;div&gt;0.0.0.0/0 → Internet Gateway&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="200" x="470" y="-110" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-27" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;div&gt;Private Route Tables&lt;/div&gt;&lt;div&gt;0.0.0.0/0 → NAT Gateway&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="200" x="470" y="-50" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-28" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Private subnets use NAT for outbound internet access." vertex="1">
+          <mxGeometry height="60" width="200" x="470" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-29" parent="1" style="rhombus;whiteSpace=wrap;html=1;shapeInside=1;" value="Internet Gateway" vertex="1">
+          <mxGeometry height="80" width="80" x="170" y="-340" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-31" edge="1" parent="1" source="7lSkl3phjQ1l7hyjkmh4-30" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="7lSkl3phjQ1l7hyjkmh4-29">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-30" parent="1" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" value="Internet&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="80" width="120" x="150" y="-510" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-36" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;div&gt;alb-sg&lt;/div&gt;&lt;div&gt;80 / 443&lt;/div&gt;&lt;div&gt;Internet → ALB&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="200" x="470" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-37" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;div&gt;app-sg&lt;/div&gt;&lt;div&gt;8000&lt;/div&gt;&lt;div&gt;alb-sg → app-sg&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="200" x="470" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-38" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;div&gt;db-sg&lt;/div&gt;&lt;div&gt;5432&lt;/div&gt;&lt;div&gt;app-sg → db-sg&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="200" x="470" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-39" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;div&gt;cache-sg&lt;/div&gt;&lt;div&gt;6379&lt;/div&gt;&lt;div&gt;app-sg → cache-sg&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="200" x="470" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-40" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="&lt;div&gt;Public subnets do not auto-assign public IPs.&lt;/div&gt;&lt;div&gt;EC2 instances are private and managed through SSM.&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="200" x="470" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-41" parent="1" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;" value="&lt;h1 style=&quot;margin-top: 0px;&quot;&gt;Network-diagram&lt;/h1&gt;" vertex="1">
+          <mxGeometry height="120" width="250" x="100" y="-570" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-47" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="RDS + Redis - private subnet groups" vertex="1">
+          <mxGeometry height="60" width="200" x="470" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="7lSkl3phjQ1l7hyjkmh4-48" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Internet-&amp;gt;Internet Gateway-&amp;gt;Public Route Table-&amp;gt; Public Subnets" vertex="1">
+          <mxGeometry height="70" width="200" x="470" y="540" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
