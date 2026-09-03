@@ -188,6 +188,34 @@ data "aws_iam_policy_document" "deploy_observability" {
       values   = ["arn:aws:iam::${local.account_id}:policy/${local.deploy_policy}"]
     }
   }
+  # BudgetsCreate -- budgets:CreateBudget can't be resource-scoped (the
+  # budget doesn't exist yet at creation time, same shape as kms:CreateKey
+  # elsewhere in this project).
+  statement {
+    sid       = "BudgetsCreate"
+    effect    = "Allow"
+    actions   = ["budgets:CreateBudget"]
+    resources = ["*"]
+  }
+  # BudgetsManage -- everything else scopes to the specific budget name.
+  statement {
+    sid    = "BudgetsManage"
+    effect = "Allow"
+    actions = [
+      "budgets:ViewBudget",
+      "budgets:ModifyBudget",
+      "budgets:DeleteBudget",
+      "budgets:CreateNotification",
+      "budgets:UpdateNotification",
+      "budgets:DeleteNotification",
+      "budgets:CreateSubscriber",
+      "budgets:UpdateSubscriber",
+      "budgets:DeleteSubscriber",
+    ]
+    resources = [
+      "arn:aws:budgets::${local.account_id}:budget/${var.project_name}-${var.environment}-monthly",
+    ]
+  }
 }
 
 

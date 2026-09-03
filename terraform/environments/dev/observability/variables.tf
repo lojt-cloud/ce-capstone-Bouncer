@@ -15,3 +15,9 @@ variable "owner" {
   type        = string
   default     = "lojt-cloud"
 }
+
+variable "budget_monthly_limit_usd" {
+  description = "Monthly cost guardrail threshold in USD, sized against COSTS.md's confirmed steady-state monthly projection with headroom"
+  type        = string
+  default     = "150"
+}
