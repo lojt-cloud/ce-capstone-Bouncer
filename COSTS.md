@@ -136,10 +136,20 @@ above, since neither is permanent — this project's
 spend well under even the discounted number, by not running
 continuously between work sessions.
 
-**Budget guardrail sizing**: set the threshold against this $130.86
-steady-state figure, with headroom for a month where resources
-accidentally get left running — not against the discounted near-term
-number, and not against the previously-assumed "~€80-90" figure, which
-(per the tagging-pass investigation, 2026-09-02) was never a real
-figure to begin with — see `00-shared-context.md`'s Budget guardrail
-note.
+**Budget guardrail — built and live-fire verified, 2026-09-03**: a real
+Terraform-managed AWS Budget (`ce-capstone-bouncer-dev-monthly`,
+`terraform/environments/dev/observability/budget.tf`), $150/mo,
+tag-scoped to `Project=ce-capstone-bouncer`, with three ACTUAL-spend
+notifications at 50%/80%/100%, reusing the existing
+observability-alerts SNS topic rather than standing up a second one.
+Threshold set against this $130.86 steady-state figure, with headroom
+for a month where resources accidentally get left running — not the
+discounted near-term number, and not the previously-assumed
+"~€80-90" figure, which (per the tagging-pass investigation,
+2026-09-02) was never a real figure to begin with. Live-fire tested per
+the module brief's requirement: temporarily lowered to $1
+(`terraform apply -var="budget_monthly_limit_usd=1"`), confirmed all
+three notification thresholds tripped to `ALARM` and real alert emails
+arrived, then restored to $150 with a plain `terraform apply`. See
+`00-shared-context.md`'s Observability module output for the full build
+writeup (KMS key policy grant, new SNS topic policy, IAM statements).
