@@ -96,4 +96,4 @@ echo "==> Verifying login via ALB..."
 ALB_DNS=$(aws elbv2 describe-load-balancers --names "$ALB_NAME" --region "$REGION" --query 'LoadBalancers[0].DNSName' --output text)
 BODY=$(python3 -c "import json,sys;print(json.dumps({'username':sys.argv[1],'password':sys.argv[2]}))" "$USERNAME" "$PASSWORD")
 
-curl -i -X POST "http://${ALB_DNS}/login" -H "Content-Type: application/json" -d "$BODY"
+curl -i -X POST "https://app.projectbouncer.org/login" -H "Content-Type: application/json" -d "$BODY"
